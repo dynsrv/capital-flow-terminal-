@@ -8,6 +8,9 @@ import * as A from './analytics.js';
 import { flows } from './flows.js';
 import { intelligence } from './ai.js';
 
+// CORS so the published artifact (or any front-end) can call this API.
+const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-headers': 'authorization,content-type' };
+
 function ctxFor(env, config) { return { env, config, cache: createCache(env) }; }
 
 function parseIds(url, fallback) {
@@ -103,7 +106,12 @@ async function handleApi(request, env, url) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    if (url.pathname.startsWith('/api/')) return handleApi(request, env, url);
+    if (url.pathname.startsWith('/api/')) {
+      if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+      const res = await handleApi(request, env, url);
+      for (const [k, v] of Object.entries(CORS)) res.headers.set(k, v);
+      return res;
+    }
     if (env.ASSETS) return env.ASSETS.fetch(request);
     return new Response('Static assets binding missing', { status: 500 });
   },

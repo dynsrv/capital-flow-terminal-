@@ -13,8 +13,17 @@
   };
 
   /* ───────── helpers ───────── */
+  // API resolution: a configured Worker URL (artifact builds) > same-origin /api > embedded snapshot (artifact builds).
+  const SNAP = window.CFT_SNAPSHOT || null;
+  let apiBase = ''; try { apiBase = localStorage.getItem('cft:apiBase') || ''; } catch (e) {}
+  const snapKey = (path) => path.split('?')[0] + '?' + (path.split('?')[1] || '').split('&').filter(Boolean).sort().join('&');
   const api = async (path, opts = {}) => {
-    const r = await fetch('/api' + path, opts);
+    if (SNAP && !apiBase) {
+      const hit = SNAP.data[snapKey(path)];
+      if (hit) return hit;
+      throw new Error('Not in the embedded snapshot. Connect your deployed Worker (link icon, top right) for live queries.');
+    }
+    const r = await fetch((apiBase ? apiBase.replace(/\/$/, '') : '') + '/api' + path, opts);
     const j = await r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` }));
     if (!j.ok) throw new Error(j.error || `API error ${r.status}`);
     state.demo = !!j.demoMode; $('#demo-banner').hidden = !state.demo;
@@ -330,6 +339,14 @@
   $('#theme-btn').onclick = () => { const t = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = t; localStorage.setItem('cft:theme', t); show(state.view); };
   if (localStorage.getItem('cft:theme')) document.documentElement.dataset.theme = localStorage.getItem('cft:theme');
   $('#refresh-btn').onclick = async () => { await loadCore(); show(state.view); };
+  const cb = $('#connect-btn');
+  if (cb) {
+    const box = $('#connect-box'); $('#connect-url').value = apiBase;
+    cb.onclick = () => { box.hidden = !box.hidden; };
+    $('#connect-save').onclick = () => { apiBase = $('#connect-url').value.trim(); try { localStorage.setItem('cft:apiBase', apiBase); } catch (e) {} location.reload(); };
+    if (SNAP && !apiBase) { const b = $('#snapshot-banner'); b.hidden = false; b.innerHTML = `LIVE DATA SNAPSHOT captured ${SNAP.capturedAt.replace('T', ' ').slice(0, 16)} UTC from the real sources (Yahoo delayed, FRED, CoinGecko, gold-api). Not updating. Connect your deployed Worker (⛓ top right) for live streaming.`; }
+    if (apiBase) cb.classList.add('on');
+  }
   (async () => {
     try { await loadCore(); } catch (e) { $('#ticker-inner').innerHTML = `<span class="down">Failed to load quotes: ${esc(e.message)}</span>`; $('#view-overview').innerHTML = `<div class="callout err">The API is unreachable (${esc(e.message)}). Check that the Worker is running and that outbound fetches to the data sources are allowed.</div>`; return; }
     show((location.hash || '#overview').slice(1) in renderers ? location.hash.slice(1) : 'overview');

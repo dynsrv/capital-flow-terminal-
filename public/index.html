@@ -12,6 +12,7 @@
 <script src="/vendor/echarts.min.js"></script>
 </head>
 <body>
+<div id="snapshot-banner" class="demo-banner snapshot" hidden></div>
 <div id="demo-banner" class="demo-banner" hidden>DEMO MODE — synthetic data. Nothing on this screen is a market price. Set DEMO_MODE="false" to load live sources.</div>
 <header class="topbar">
   <div class="brand"><span class="logo"></span><span class="brand-name">CAPITAL FLOW <b>TERMINAL</b></span><span class="brand-sub">Global capital & cross-asset intelligence</span></div>
@@ -27,10 +28,12 @@
   <div class="topbar-right">
     <div id="regime-badge" class="regime-badge neutral" title="Rules-based market regime (see Overview)">REGIME …</div>
     <div class="clock" id="clock">--:--:-- UTC</div>
+    <button id="connect-btn" class="icon-btn" title="Connect to your deployed Worker">⛓</button>
     <button id="refresh-btn" class="icon-btn" title="Refresh data">↻</button>
     <button id="theme-btn" class="icon-btn" title="Toggle light/dark">◐</button>
   </div>
 </header>
+<div id="connect-box" class="connect-box" hidden><label for="connect-url">Worker URL</label><input type="text" id="connect-url" placeholder="https://capital-flow-terminal.<you>.workers.dev"><button class="btn" id="connect-save">Connect</button><span class="xs muted">Leave empty to use this page's own API (local/Worker) or the embedded snapshot.</span></div>
 <div class="ticker" id="ticker"><div class="ticker-inner" id="ticker-inner">Loading live quotes…</div></div>
 
 <main id="main">
