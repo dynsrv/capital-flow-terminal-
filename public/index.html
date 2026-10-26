@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capital Flow Terminal</title>
+<meta name="description" content="Global Capital Flow & Market Intelligence Dashboard — where capital is concentrated, how markets are changing, and cross-asset implications.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230b0f14'/%3E%3Cpath d='M6 22l6-8 5 4 9-10' stroke='%23f5a623' stroke-width='3' fill='none'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/app.css">
+<script src="/vendor/echarts.min.js"></script>
+</head>
+<body>
+<div id="demo-banner" class="demo-banner" hidden>DEMO MODE — synthetic data. Nothing on this screen is a market price. Set DEMO_MODE="false" to load live sources.</div>
+<header class="topbar">
+  <div class="brand"><span class="logo"></span><span class="brand-name">CAPITAL FLOW <b>TERMINAL</b></span><span class="brand-sub">Global capital & cross-asset intelligence</span></div>
+  <nav class="tabs" id="tabs">
+    <button data-view="overview" class="active">Overview</button>
+    <button data-view="monitor">Monitor</button>
+    <button data-view="flows">Flows</button>
+    <button data-view="analytics">Analytics</button>
+    <button data-view="intel">Intelligence</button>
+    <button data-view="shock">Shock Sim</button>
+    <button data-view="admin">Admin</button>
+  </nav>
+  <div class="topbar-right">
+    <div id="regime-badge" class="regime-badge neutral" title="Rules-based market regime (see Overview)">REGIME …</div>
+    <div class="clock" id="clock">--:--:-- UTC</div>
+    <button id="refresh-btn" class="icon-btn" title="Refresh data">↻</button>
+    <button id="theme-btn" class="icon-btn" title="Toggle light/dark">◐</button>
+  </div>
+</header>
+<div class="ticker" id="ticker"><div class="ticker-inner" id="ticker-inner">Loading live quotes…</div></div>
+
+<main id="main">
+  <section id="view-overview" class="view active"></section>
+  <section id="view-monitor" class="view"></section>
+  <section id="view-flows" class="view"></section>
+  <section id="view-analytics" class="view"></section>
+  <section id="view-intel" class="view"></section>
+  <section id="view-shock" class="view"></section>
+  <section id="view-admin" class="view"></section>
+</main>
+
+<aside id="drawer" class="drawer" hidden>
+  <div class="drawer-head"><div id="drawer-title">—</div><button class="icon-btn" id="drawer-close">✕</button></div>
+  <div id="drawer-body"></div>
+</aside>
+
+<footer class="statusbar" id="statusbar">
+  <span class="legend"><i class="dot rt"></i>real-time <i class="dot delayed"></i>delayed <i class="dot eod"></i>end-of-day <i class="dot slow"></i>weekly/monthly <i class="dot stale"></i>stale/unavailable</span>
+  <span id="status-sources">sources: …</span>
+  <span id="status-updated">updated —</span>
+</footer>
+<script src="/app.js"></script>
+</body>
+</html>

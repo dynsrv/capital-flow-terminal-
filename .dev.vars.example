@@ -1,0 +1,13 @@
+# Copy to .dev.vars (wrangler dev) — also read by local/server.mjs. Never commit .dev.vars.
+ADMIN_TOKEN=change-me
+DEMO_MODE=false
+# Optional data keys
+FRED_API_KEY=
+EIA_API_KEY=
+COINGECKO_API_KEY=
+MARKET_DATA_API_KEY=
+# Optional AI / search
+ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=claude-sonnet-4-5
+SEARCH_API_KEY=
+SEARCH_PROVIDER=exa

@@ -1,0 +1,16 @@
+{
+  "name": "capital-flow-terminal",
+  "version": "0.1.0",
+  "description": "Global Capital Flow & Market Intelligence Dashboard — Cloudflare Worker + static terminal UI",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "local": "node local/server.mjs",
+    "check": "node local/check.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

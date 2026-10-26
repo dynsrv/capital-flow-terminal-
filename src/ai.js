@@ -1,0 +1,65 @@
+// AI Market Intelligence. The model is given ONLY measured inputs (anomalies, performance table,
+// regime, pattern checks and — if a search key is configured — recent news snippets) and must
+// return a structured Signal → Evidence → Possible Cause → Cross-Asset Impact → Confidence → What to Watch.
+// Without an Anthropic key the endpoint returns the measured inputs with an explicit "AI not configured" flag.
+import { fetchJSON } from './lib/util.js';
+import { anomalies, regime, patterns, performance } from './analytics.js';
+
+const SYSTEM = `You are a sell-side cross-asset strategist writing for an institutional terminal.
+Rules:
+- Use ONLY the numbers provided in the input. Never invent prices, flows, or statistics.
+- Separate clearly: VERIFIED FACTS (from the input data), HISTORICAL RELATIONSHIPS (well-known, cite the episode), HYPOTHESES (your inference, hedged), SCENARIOS (conditional).
+- Do not assert causation unless the evidence supports it; say "consistent with" or "one hypothesis is".
+- If news snippets are provided, cite them by their [n] index; if none, say evidence is price/volatility-based only.
+- Draw on lessons from Black Monday 1987, the dot-com bust 2000-02 and the 2008 subprime crisis where the pattern checks show resemblance; otherwise do not force the analogy.
+- Confidence: Low / Medium / High with one-line justification.
+Return strict JSON: {"findings":[{"signal":"","evidence":["..."],"possibleCause":"","crossAssetImpact":"","confidence":"Low|Medium|High","confidenceWhy":"","whatToWatch":["..."],"classification":{"verifiedFacts":["..."],"historicalRelationships":["..."],"hypotheses":["..."],"scenarios":["..."]},"citations":[1,2]}],"overview":"2-3 sentence summary of what is changing and why it matters"}`;
+
+async function searchNews(config, query) {
+  const key = config.keys.SEARCH_API_KEY; const provider = (config.keys.SEARCH_PROVIDER || 'exa').toLowerCase();
+  if (!key) return { items: [], note: 'No search key configured; evidence is price/volatility-based only.' };
+  try {
+    if (provider === 'parallel') {
+      const j = await fetchJSON('https://api.parallel.ai/v1beta/search', { headers: { 'x-api-key': key, 'content-type': 'application/json' }, method: 'POST', body: JSON.stringify({ objective: query, search_queries: [query], max_results: 6, max_chars_per_result: 600 }) });
+      return { items: (j.results || []).map((r, i) => ({ n: i + 1, title: r.title, url: r.url, snippet: (r.excerpts || []).join(' ').slice(0, 600), published: r.published_date || null })) };
+    }
+    const j = await fetchJSON('https://api.exa.ai/search', { headers: { 'x-api-key': key, 'content-type': 'application/json' }, method: 'POST', body: JSON.stringify({ query, numResults: 6, type: 'auto', contents: { highlights: { maxCharacters: 600 } }, startPublishedDate: new Date(Date.now() - 7 * 86400e3).toISOString() }) });
+    return { items: (j.results || []).map((r, i) => ({ n: i + 1, title: r.title, url: r.url, snippet: (r.highlights || []).join(' ').slice(0, 600), published: r.publishedDate || null })) };
+  } catch (e) { return { items: [], note: `Search failed: ${e.message}` }; }
+}
+
+export async function intelligence(ctx, { ids, question } = {}) {
+  const { config } = ctx;
+  const universeIds = ids && ids.length ? ids : ['SPX', 'NDX', 'RUT', 'SX5E', 'NKY', 'SHCOMP', 'EEM', 'UST2Y', 'UST10Y', 'T10Y2Y', 'HYOAS', 'IGOAS', 'BTC', 'ETH', 'SOL', 'GOLD', 'SILVER', 'WTI', 'NATGAS', 'COPPER', 'DXY', 'USDJPY', 'VIX'];
+  const [an, reg, pat, perf] = await Promise.all([anomalies(ctx, universeIds), regime(ctx), patterns(ctx), performance(ctx, universeIds)]);
+  const inputs = {
+    asOf: new Date().toISOString(),
+    regime: { label: reg.label, score: reg.score, components: reg.components.map(c => c.detail) },
+    anomalies: an.items.slice(0, 12),
+    patternResemblance: pat.items.map(p => ({ episode: p.name, hits: `${p.hits}/${p.total}`, present: p.checks.filter(c => c.hit).map(c => c.label) })),
+    performance: perf.map(r => ({ id: r.id, name: r.name, price: r.price, pct1d: r.pct1d, d7: r.perf['7D'], d30: r.perf['30D'], ytd: r.perf.YTD, vol30: r.vol['30D'], dd1y: r.maxDrawdown1Y, freshness: r.freshness, asOf: r.asOf })),
+  };
+  const result = { inputs, anomalies: an, regime: reg, patterns: pat, ai: null, news: null };
+
+  const apiKey = config.keys.ANTHROPIC_API_KEY;
+  if (!apiKey) { result.aiStatus = { configured: false, message: 'ANTHROPIC_API_KEY not configured — showing measured anomalies, regime and pattern checks only. Add the key in Admin to enable AI explanations.' }; return result; }
+
+  const topMovers = an.items.slice(0, 3).map(a => a.name).join(', ');
+  const query = question || (topMovers ? `markets news ${topMovers} this week` : 'global markets this week stocks bonds crypto');
+  const news = await searchNews(config, query);
+  result.news = news;
+
+  const userMsg = `INPUT DATA (measured):\n${JSON.stringify(inputs, null, 1)}\n\nNEWS SNIPPETS:\n${news.items.length ? news.items.map(n => `[${n.n}] ${n.title} (${n.published || 'n.d.'}) ${n.url}\n${n.snippet}`).join('\n\n') : '(none)'}\n\n${question ? `USER QUESTION: ${question}\n` : ''}Produce 2-5 findings, most significant first.`;
+  try {
+    const j = await fetchJSON('https://api.anthropic.com/v1/messages', {
+      method: 'POST', timeoutMs: 60000,
+      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({ model: config.keys.ANTHROPIC_MODEL || 'claude-sonnet-4-5', max_tokens: 2500, system: SYSTEM, messages: [{ role: 'user', content: userMsg }] }),
+    });
+    const text = (j.content || []).map(c => c.text || '').join('');
+    const m = text.match(/\{[\s\S]*\}/);
+    let parsed = null; try { parsed = JSON.parse(m ? m[0] : text); } catch (e) { parsed = { overview: text, findings: [] }; }
+    result.ai = parsed; result.aiStatus = { configured: true, model: j.model, usage: j.usage };
+  } catch (e) { result.aiStatus = { configured: true, error: e.message }; }
+  return result;
+}

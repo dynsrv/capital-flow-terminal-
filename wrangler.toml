@@ -1,0 +1,43 @@
+name = "capital-flow-terminal"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Static terminal UI
+[assets]
+directory = "./public"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+# KV: response cache + admin-entered API credentials.
+# Create with:  wrangler kv namespace create CACHE
+[[kv_namespaces]]
+binding = "CACHE"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Optional D1 for historical snapshots (Phase 3). Create with: wrangler d1 create cft-history
+# [[d1_databases]]
+# binding = "HISTORY"
+# database_name = "cft-history"
+# database_id = "REPLACE_WITH_D1_ID"
+
+# Warm the cache every 5 minutes so first page loads are fast.
+[triggers]
+crons = ["*/5 * * * *"]
+
+[vars]
+APP_NAME = "Capital Flow Terminal"
+# Set to "true" to serve the explicitly labelled demo dataset instead of live sources.
+DEMO_MODE = "false"
+# Cache TTL overrides (seconds). Leave defaults unless you hit rate limits.
+TTL_QUOTES = "60"
+TTL_HISTORY = "900"
+TTL_MACRO = "3600"
+
+# Secrets — set with `wrangler secret put <NAME>` (never commit values):
+#   ADMIN_TOKEN        required to open /admin and save credentials
+#   FRED_API_KEY       optional (keyless CSV endpoint is used otherwise)
+#   EIA_API_KEY        optional (energy spot prices)
+#   ANTHROPIC_API_KEY  optional (AI Market Intelligence explanations)
+#   SEARCH_API_KEY     optional (Exa / Parallel web search for source citations)
+#   MARKET_DATA_API_KEY optional (Massive/Polygon-compatible provider)
