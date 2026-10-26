@@ -52,7 +52,7 @@ const out = `<title>Capital Flow Terminal</title>
 body { padding-left: max(0px, env(safe-area-inset-left, 0px)); padding-right: max(0px, env(safe-area-inset-right, 0px)); }
 main { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 10px 16px; }
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.1/echarts.min.js"></script>
+<script>${fs.readFileSync(path.join(ROOT, 'public/vendor/echarts.min.js'), 'utf8')}</script>
 ${bodyInner}
 <script>window.CFT_SNAPSHOT = ${JSON.stringify(snapshot)};</script>
 <script>${js}</script>
