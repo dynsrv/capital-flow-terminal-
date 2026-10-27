@@ -200,7 +200,7 @@
 
   /* overlay management */
   function openScrim(onClose) { const s = $('#scrim'); s.hidden = false; s.onclick = () => { closeOverlays(); onClose && onClose(); }; }
-  function closeOverlays() { $('#scrim').hidden = true; $('#drawer').hidden = true; $('#popover').hidden = true; $('#side').classList.remove('open'); closeTvModal(); }
+  function closeOverlays() { $('#scrim').hidden = true; $('#drawer').hidden = true; $('#popover').hidden = true; $('#side').classList.remove('open'); const sh = $('#sheet'); if (sh) sh.hidden = true; document.body.classList.remove('news-open', 'sheet-open'); closeTvModal(); syncTabs(); }
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeOverlays(); });
 
   /* asset picker popover */
@@ -235,6 +235,94 @@
     $('#side-btn').onclick = () => { const o = $('#side').classList.toggle('open'); if (o) openScrim(() => $('#side').classList.remove('open')); else closeOverlays(); };
     $('#side-close').onclick = closeOverlays;
     initSideResize();
+    initPhoneShell();
+  }
+
+  /* ═════════════════════ PHONE APP SHELL (<760px) ═════════════════════
+     Native-app patterns: bottom tab bar (Markets · Monitor · News · Risk · More), a compact header whose title
+     appears once the large page title scrolls away, News as a full-screen tab, a More sheet for the remaining
+     sections and settings, pull-to-refresh, swipe-down to dismiss sheets, light haptics where supported. */
+  const phoneMQ = window.matchMedia('(max-width: 759px)');
+  const isPhone = () => phoneMQ.matches;
+  const haptic = () => { try { if (navigator.vibrate) navigator.vibrate(8); } catch (e) {} };
+  const TABS = [['overview', 'Markets', 'overview'], ['monitor', 'Monitor', 'monitor'], ['news', 'News', 'news'], ['risk', 'Risk', 'risk'], ['more', 'More', 'more']];
+  function syncTabs() {
+    const bar = document.getElementById('tabbar'); if (!bar) return;
+    const newsOpen = document.body.classList.contains('news-open');
+    const sheetOpen = document.body.classList.contains('sheet-open');
+    const inMore = !['overview', 'monitor', 'risk'].includes(state.view);
+    bar.querySelectorAll('[data-tab]').forEach(b => { const k = b.dataset.tab; const on = sheetOpen ? k === 'more' : newsOpen ? k === 'news' : (k === state.view || (k === 'more' && inMore)); b.classList.toggle('active', on); if (on) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+  }
+  function openNewsTab() { closeOverlays(); $('#side').classList.add('open'); document.body.classList.add('news-open'); $('#news-list').scrollTop = 0; syncTabs(); }
+  function openSheet() {
+    closeOverlays();
+    const tile = (k) => `<button type="button" class="sh-tile ${state.view === k ? 'active' : ''}" data-go="${k}"><span class="sh-ic">${ic(VIEWS[k].icon)}</span><span>${esc(VIEWS[k].label)}</span></button>`;
+    const pill = (id) => { const p = $('#' + id); return p ? `<span class="${p.className}"><i class="dot"></i><span>${esc(p.textContent.trim())}</span></span>` : ''; };
+    const dark = document.documentElement.dataset.theme !== 'light';
+    $('#sheet-body').innerHTML = `
+      <div class="sh-status">${pill('regime-pill')}${pill('stress-pill')}<span class="xs muted">${esc($('#updated').textContent)}</span></div>
+      <div class="sh-sec">Explore</div>
+      <div class="sh-grid">${['intel', 'analytics', 'flows', 'shock'].map(tile).join('')}<button type="button" class="sh-tile" data-act="tv"><span class="sh-ic">${ic('tv')}</span><span>Live TV</span></button><button type="button" class="sh-tile" data-act="news"><span class="sh-ic">${ic('news')}</span><span>News</span></button></div>
+      <div class="sh-sec">Settings</div>
+      <div class="sh-list">
+        <button type="button" data-act="theme"><span class="sh-ic">${ic(dark ? 'sun' : 'moon')}</span><span>Appearance</span><b>${dark ? 'Dark' : 'Light'}</b></button>
+        <button type="button" data-act="refresh"><span class="sh-ic">${ic('refresh')}</span><span>Refresh Data</span><b>or pull down</b></button>
+        <button type="button" data-act="connect"><span class="sh-ic">${ic('link')}</span><span>Connect API</span><b>${apiBase ? 'connected' : SNAP ? 'snapshot' : 'this site'}</b></button>
+      </div>
+      <div class="sh-foot">${$('#side-health').innerHTML}<p class="xs muted">Information only. Not investment advice.</p></div>`;
+    applyTitleCase($('#sheet-body'));
+    const sh = $('#sheet'); sh.hidden = false; sh.style.transform = ''; document.body.classList.add('sheet-open'); openScrim(); syncTabs();
+    sh.onclick = async (e) => {
+      const g = e.target.closest('[data-go]'); if (g) { haptic(); closeOverlays(); show(g.dataset.go); return; }
+      const a = e.target.closest('[data-act]'); if (!a) return; haptic();
+      const act = a.dataset.act;
+      if (act === 'tv') { closeOverlays(); openTvModal(); }
+      else if (act === 'news') openNewsTab();
+      else if (act === 'theme') { $('#theme-btn').click(); openSheet(); }
+      else if (act === 'refresh') { closeOverlays(); $('#refresh-btn').click(); }
+      else if (act === 'connect') { closeOverlays(); $('#connect-box').hidden = false; window.scrollTo({ top: 0 }); $('#connect-url').focus(); }
+    };
+  }
+  /** Drag a handle down to dismiss a bottom sheet. */
+  function swipeToClose(panel, handleSel, onClose) {
+    let y0 = null, dy = 0;
+    panel.addEventListener('touchstart', (e) => { if (!isPhone() || !e.target.closest(handleSel)) { y0 = null; return; } y0 = e.touches[0].clientY; dy = 0; panel.style.transition = 'none'; }, { passive: true });
+    panel.addEventListener('touchmove', (e) => { if (y0 == null) return; dy = Math.max(0, e.touches[0].clientY - y0); panel.style.transform = `translateY(${dy}px)`; }, { passive: true });
+    panel.addEventListener('touchend', () => { if (y0 == null) return; y0 = null; panel.style.transition = ''; if (dy > 90) { panel.style.transform = ''; onClose(); } else panel.style.transform = ''; });
+  }
+  function initPhoneShell() {
+    const bar = $('#tabbar');
+    bar.innerHTML = TABS.map(([k, l, i]) => `<button type="button" data-tab="${k}"><span class="tab-ic">${ic(i)}</span><span class="tab-l">${l}</span></button>`).join('');
+    bar.onclick = (e) => {
+      const b = e.target.closest('[data-tab]'); if (!b) return; haptic(); const k = b.dataset.tab;
+      if (k === 'news') { if (document.body.classList.contains('news-open')) closeOverlays(); else openNewsTab(); return; }
+      if (k === 'more') { if (document.body.classList.contains('sheet-open')) closeOverlays(); else openSheet(); return; }
+      const wasOverlay = document.body.classList.contains('news-open') || document.body.classList.contains('sheet-open');
+      closeOverlays();
+      if (state.view === k && !wasOverlay) window.scrollTo({ top: 0, behavior: 'smooth' }); else if (state.view !== k) show(k);
+    };
+    swipeToClose($('#sheet'), '[data-grab], .sh-status', closeOverlays);
+    swipeToClose($('#drawer'), '.drawer-h', closeOverlays);
+    // header height → CSS var (News tab sits right under it)
+    const hdr = $('.topbar'); const setH = () => document.documentElement.style.setProperty('--hdr-h', hdr.getBoundingClientRect().height + 'px');
+    setH(); if (typeof ResizeObserver !== 'undefined') new ResizeObserver(setH).observe(hdr);
+    // compact title appears in the header once the large page title scrolls under it
+    if (typeof IntersectionObserver !== 'undefined') {
+      const io = new IntersectionObserver(([en]) => { $('.topbar').classList.toggle('titled', !en.isIntersecting && en.boundingClientRect.top < 80); }, { rootMargin: '-60px 0px 0px 0px', threshold: 0 });
+      io.observe($('#page-title'));
+    }
+    // pull to refresh (only at the very top of the page, outside sheets)
+    const ptr = { y0: null, pull: 0, busy: false }; const el = $('#ptr');
+    window.addEventListener('touchstart', (e) => { const b = document.body.classList; ptr.y0 = (!isPhone() || window.scrollY > 2 || ptr.busy || b.contains('news-open') || b.contains('sheet-open') || !$('#drawer').hidden || !$('#popover').hidden || e.target.closest('.ch, canvas, input, select, .tbl')) ? null : e.touches[0].clientY; ptr.pull = 0; }, { passive: true });
+    window.addEventListener('touchmove', (e) => { if (ptr.y0 == null) return; if (window.scrollY > 2) { ptr.y0 = null; el.style.transform = ''; el.style.opacity = ''; return; } ptr.pull = Math.min(90, Math.max(0, e.touches[0].clientY - ptr.y0) * 0.5); el.style.transform = `translate(-50%, ${ptr.pull}px) rotate(${ptr.pull * 4}deg)`; el.style.opacity = String(Math.min(1, ptr.pull / 45)); el.classList.toggle('ready', ptr.pull >= 64); }, { passive: true });
+    window.addEventListener('touchend', async () => {
+      if (ptr.y0 == null) return; ptr.y0 = null; const go = ptr.pull >= 64;
+      if (go) { ptr.busy = true; haptic(); el.classList.add('busy'); el.style.transform = 'translate(-50%, 56px)'; try { await loadCore(); await show(state.view); loadNews(); toast('Updated'); } catch (err) { toast(err.message); } ptr.busy = false; el.classList.remove('busy'); }
+      el.style.transform = ''; el.style.opacity = ''; el.classList.remove('ready');
+    });
+    const onMQ = () => { if (!isPhone()) document.body.classList.remove('news-open', 'sheet-open'); syncTabs(); };
+    if (phoneMQ.addEventListener) phoneMQ.addEventListener('change', onMQ);
+    syncTabs();
   }
   /* Resizable sidebar (docked layout only). Width is kept per browser; double-click the handle to reset. */
   const SIDE_MIN = 260, SIDE_MAX = 640, SIDE_DEF = 312;
@@ -334,6 +422,7 @@
   $('#tv-frame').onclick = e => { if (e.target.closest('[data-play]') && !e.target.closest('a')) { if (!canEmbed) return; state.tv.playing = true; drawTv(); } };
   $('#tv-modal-frame').onclick = e => { if (e.target.closest('[data-play]') && !e.target.closest('a') && canEmbed) { $('#tv-modal-frame').innerHTML = tvIframe(tvCur()); } };
   $('#tv-max').onclick = openTvModal; $('#tv-modal-close').onclick = closeTvModal;
+  $('#news-tv').onclick = () => { haptic(); openTvModal(); };
   $('#tv-pop').onclick = popOutTv; $('#tv-modal-pop').onclick = popOutTv;
 
   /* ───────── analysis renderers ───────── */
@@ -947,13 +1036,14 @@
     $$('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
     $$('.view').forEach(s => s.classList.toggle('active', s.id === 'view-' + view));
     $('#page-title').textContent = meta.title; $('#page-sub').textContent = meta.sub; document.title = `${meta.label} · Capital Flow Terminal`;
+    $('#app-title').textContent = titleCase(meta.title); $('.topbar').classList.remove('titled'); syncTabs();
     if (location.hash.slice(1) !== view) history.replaceState(null, '', '#' + view);
     window.scrollTo({ top: 0 });
     $$('.view:not(.active) .ch, .view:not(.active) [id$="-chart"], .view:not(.active) .ch-mini').forEach(n => { const c = window.echarts && echarts.getInstanceByDom(n); if (c) { if (ro) ro.unobserve(n); c.dispose(); } });
     try { await renderers[view](); } catch (e) { $('#view-' + view).innerHTML = errorBox('Could not load this view: ' + e.message); }
   }
   window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h in renderers && h !== state.view) show(h); });
-  const syncThemeIcon = () => { const b = $('#theme-btn'); b.innerHTML = ic(document.documentElement.dataset.theme === 'light' ? 'moon' : 'sun'); };
+  const syncThemeIcon = () => { const b = $('#theme-btn'); b.innerHTML = ic(document.documentElement.dataset.theme === 'light' ? 'moon' : 'sun'); const m = document.querySelector('meta[name="theme-color"]'); if (m) m.content = getComputedStyle(document.documentElement).getPropertyValue('--head-bg').trim() || '#000000'; };
   $('#theme-btn').onclick = () => { const t = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'; document.documentElement.dataset.theme = t; try { localStorage.setItem('cft:theme', t); } catch (e) {} syncThemeIcon(); show(state.view); };
   $('#refresh-btn').onclick = async (e) => { const b = e.currentTarget; b.disabled = true; try { await loadCore(); await show(state.view); toast('Data refreshed'); } catch (err) { toast(err.message); } finally { b.disabled = false; } };
   $('#connect-btn').onclick = () => { $('#connect-box').hidden = !$('#connect-box').hidden; };

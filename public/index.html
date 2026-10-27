@@ -21,6 +21,7 @@
 <header class="topbar">
   <div class="top-row">
     <a class="brand" href="#overview"><span class="logo" data-icon="logo"></span><div class="brand-t"><b>Capital Flow</b><span>Market intelligence terminal</span></div></a>
+    <div class="app-title" id="app-title" aria-hidden="true"></div>
     <nav class="nav" id="nav" aria-label="Main navigation"></nav>
     <div class="top-actions">
       <button id="regime-pill" class="pill mid" title="Rules-based market regime"><i class="dot"></i><span>Regime …</span></button>
@@ -47,7 +48,7 @@
     <section class="side-news" id="side-news">
       <div class="side-h">
         <h2><span data-icon="news"></span>News</h2>
-        <div class="side-tools"><span class="xs muted" id="news-meta"></span><button class="icon-btn sm" id="news-refresh" title="Refresh news" aria-label="Refresh news" data-icon="refresh"></button><button class="icon-btn sm side-close" id="side-close" title="Close panel" aria-label="Close panel" data-icon="x"></button></div>
+        <div class="side-tools"><span class="xs muted" id="news-meta"></span><button class="icon-btn sm news-tv-btn" id="news-tv" title="Live TV" aria-label="Watch live TV" data-icon="tv"></button><button class="icon-btn sm" id="news-refresh" title="Refresh news" aria-label="Refresh news" data-icon="refresh"></button><button class="icon-btn sm side-close" id="side-close" title="Close panel" aria-label="Close panel" data-icon="x"></button></div>
       </div>
       <div class="side-filters">
         <div class="seg" id="news-region" role="tablist"><button type="button" data-v="all" class="active">All</button><button type="button" data-v="global">Global</button><button type="button" data-v="indonesia">Indonesia</button></div>
@@ -88,6 +89,12 @@
   </div>
 </div>
 
+<div id="ptr" class="ptr" aria-hidden="true"><span class="ptr-ring"></span></div>
+<nav class="tabbar" id="tabbar" aria-label="Main navigation"></nav>
+<div id="sheet" class="sheet" hidden role="dialog" aria-modal="true" aria-label="More">
+  <div class="grab" data-grab></div>
+  <div class="sheet-b" id="sheet-body"></div>
+</div>
 <div id="scrim" class="scrim" hidden></div>
 <div id="popover" class="popover" hidden></div>
 <aside id="drawer" class="drawer" hidden aria-modal="true" role="dialog">
@@ -95,7 +102,7 @@
   <div class="drawer-b" id="drawer-body"></div>
 </aside>
 <div id="tv-modal" class="tv-modal" hidden role="dialog" aria-modal="true" aria-label="Live TV">
-  <div class="tv-modal-h"><select id="tv-modal-select" aria-label="Choose a channel"></select><div class="row-actions"><a class="btn ghost" id="tv-modal-yt" target="_blank" rel="noopener">Open on YouTube</a><button class="btn ghost" id="tv-modal-pop">Pop out</button><button class="icon-btn" id="tv-modal-close" aria-label="Close" data-icon="x"></button></div></div>
+  <div class="tv-modal-h"><select id="tv-modal-select" aria-label="Choose a channel"></select><div class="row-actions"><a class="btn ghost" id="tv-modal-yt" target="_blank" rel="noopener">Open on YouTube</a><button class="btn ghost" id="tv-modal-pop">Pop out</button></div><button class="icon-btn" id="tv-modal-close" aria-label="Close" data-icon="x"></button></div>
   <div class="tv-modal-b" id="tv-modal-frame"></div>
 </div>
 <div id="toast" class="toast" hidden></div>
