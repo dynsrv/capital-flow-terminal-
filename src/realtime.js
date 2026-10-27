@@ -191,9 +191,28 @@ export async function rtQuotes(ctx) {
     for (const it of pending) { const p = it.chain[it.step]; if (p) (groups[p] ||= []).push({ ...it, symbol: RT_MAP[it.id][p] }); }
     const next = [];
     await Promise.all(Object.entries(groups).map(async ([p, items]) => {
-      const ttl = p === 'twelvedata' ? Math.max(s.intervalSec, Math.ceil(items.length * 60 / s.tdCredits)) : s.intervalSec;
-      const syms = items.map(i => i.symbol);
-      const r = await cache.resolve(`rt:${p}:${syms.join(',')}`, ttl, () => FETCH[p](syms, config.keys));
+      let ttl = p === 'twelvedata' ? Math.max(s.intervalSec, Math.ceil(items.length * 60 / s.tdCredits)) : s.intervalSec;
+      let r;
+      if (p === 'twelvedata' && items.length > s.tdCredits) {
+        // More symbols than credits per minute: split into credit-sized chunks, each refreshed in its own minute slot,
+        // so one request never exceeds the plan's per-minute credits. DXY legs go first so they refresh together.
+        items.sort((a, b) => (DXY_W[b.id] != null) - (DXY_W[a.id] != null));
+        const chunks = []; for (let i = 0; i < items.length; i += s.tdCredits) chunks.push(items.slice(i, i + s.tdCredits));
+        const slot = Math.floor(Date.now() / 60000) % chunks.length; ttl = chunks.length * 60;
+        const parts = await Promise.all(chunks.map(async (c, i) => {
+          const syms = c.map(x => x.symbol); const key = `rt:${p}:${syms.join(',')}`;
+          const e = await cache.read(key);
+          if (i !== slot) return e ? { data: e.data, fetchedAt: e.fetchedAt, stale: Date.now() - e.fetchedAt > ttl * 1000 } : { data: [], error: 'waiting for its credit slot' };
+          return cache.resolve(key, 55, () => FETCH[p](syms, config.keys));
+        }));
+        r = { data: parts.flatMap(x => x.data || []), error: parts.every(x => x.error) ? parts.find(x => x.error).error : null, stale: parts.some(x => x.stale), fetchedAt: Math.min(...parts.map(x => x.fetchedAt || Date.now())) };
+        // a chunk that has not fetched yet must not teach plan gaps
+        const waiting = new Set(chunks.flatMap((c, i) => parts[i].error ? c.map(x => x.symbol) : []));
+        r.data = r.data.filter(x => !waiting.has(x.symbol)); if (waiting.size && !r.error) r.partial = waiting;
+      } else {
+        const syms = items.map(i => i.symbol);
+        r = await cache.resolve(`rt:${p}:${syms.join(',')}`, ttl, () => FETCH[p](syms, config.keys));
+      }
       const prev = providers[p];
       providers[p] = { name: PROVIDERS[p].name, ok: !r.error || !!(prev && prev.ok), error: r.error || (prev && prev.error) || null, stale: !!r.stale, ttl, fetchedAt: r.fetchedAt ? new Date(r.fetchedAt).toISOString() : null, priced: (prev ? prev.priced : 0), missed: (prev ? prev.missed : []) };
       const bySym = new Map((r.data || []).map(x => [x.symbol, x]));
@@ -201,7 +220,7 @@ export async function rtQuotes(ctx) {
         const x = bySym.get(it.symbol);
         if (x && x.price != null && !x.error) { providers[p].priced++; quotes.push({ id: it.id, price: x.price, prevClose: x.prevClose ?? null, pct1d: x.prevClose ? (x.price / x.prevClose - 1) * 100 : null, ts: x.ts, source: p, delayed: !!x.delayed, stale: !!r.stale }); continue; }
         providers[p].missed.push(it.id);
-        if ((!r.error || (x && x.error)) && !it.forced) { try { await cache.write(gapKey(p, it.symbol), { data: 1, fetchedAt: Date.now() }, 6 * 3600); } catch (e) {} }
+        if ((!r.error || (x && x.error)) && !it.forced && !(r.partial && r.partial.has(it.symbol))) { try { await cache.write(gapKey(p, it.symbol), { data: 1, fetchedAt: Date.now() }, 6 * 3600); } catch (e) {} }
         if (it.step + 1 < it.chain.length) next.push({ ...it, step: it.step + 1 }); else unpriced.push(it.id);
       }
     }));
@@ -221,9 +240,19 @@ export async function rtQuotes(ctx) {
 
 /** Admin "Scan my plans": ask every configured provider for every symbol it maps, once, and record what came back. */
 export async function scanPlans(ctx) {
-  const s = rtSettings(ctx.config); const results = {}; const summary = {};
+  const s = rtSettings(ctx.config); const results = {}; const summary = {}; const prev = (await loadRouting(ctx)).scan;
   await Promise.all(ORDER.filter(p => s.configured[p]).map(async (p) => {
-    const pairs = Object.entries(RT_MAP).filter(([, m]) => m[p]).map(([id, m]) => [id, m[p]]);
+    let pairs = Object.entries(RT_MAP).filter(([, m]) => m[p]).map(([id, m]) => [id, m[p]]);
+    let pendingTd = 0;
+    if (p === 'twelvedata' && pairs.length > s.tdCredits) {
+      // one request may not exceed the plan's credits per minute: test the unscanned (or failed) symbols first, keep the rest
+      const pr = (prev && prev.results) || {};
+      const rankOf = ([id]) => { const x = pr[id] && pr[id][p]; return !x || x.ok === null ? 0 : 1; };
+      pairs.sort((a, b) => rankOf(a) - rankOf(b));
+      for (const [id] of pairs.slice(s.tdCredits)) { const x = pr[id] && pr[id][p]; if (x) (results[id] ||= {})[p] = x; }
+      pendingTd = pairs.slice(s.tdCredits).filter(pp => rankOf(pp) === 0).length;
+      pairs = pairs.slice(0, s.tdCredits);
+    }
     let data = []; let error = null;
     try { data = await FETCH[p](pairs.map(x => x[1]), ctx.config.keys); } catch (e) { error = e.message; }
     const bySym = new Map((data || []).map(x => [x.symbol, x]));
@@ -233,6 +262,7 @@ export async function scanPlans(ctx) {
       (results[id] ||= {})[p] = error ? { ok: null, error } : priced ? { ok: true, price: x.price, delayed: !!x.delayed } : { ok: false, error: (x && x.error) ? String(x.error).slice(0, 80) : 'not in plan' };
       if (priced) { ok++; try { await ctx.cache.del(gapKey(p, sym)); } catch (e) {} }
     }
+    if (p === 'twelvedata') { const all = Object.entries(RT_MAP).filter(([, m]) => m[p]); summary[p] = { name: PROVIDERS[p].name, priced: all.filter(([id]) => results[id] && results[id][p] && results[id][p].ok === true).length, of: all.length, error, pending: pendingTd }; return; }
     summary[p] = { name: PROVIDERS[p].name, priced: ok, of: pairs.length, error };
   }));
   const scan = { at: new Date().toISOString(), results, summary };
