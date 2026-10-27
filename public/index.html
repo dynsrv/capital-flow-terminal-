@@ -55,7 +55,7 @@ try { var u = JSON.parse(localStorage.getItem('cft:ui') || 'null'); if (u) { var
         <div class="side-tools"><span class="xs muted" id="news-meta"></span><button class="icon-btn sm news-tv-btn" id="news-tv" title="Live TV" aria-label="Watch live TV" data-icon="tv"></button><button class="icon-btn sm" id="news-refresh" title="Refresh news" aria-label="Refresh news" data-icon="refresh"></button><button class="icon-btn sm side-close" id="side-close" title="Close panel" aria-label="Close panel" data-icon="x"></button></div>
       </div>
       <div class="side-filters">
-        <div class="seg" id="news-region" role="tablist"><button type="button" data-v="all" class="active">All</button><button type="button" data-v="global">Global</button><button type="button" data-v="indonesia">Indonesia</button></div>
+        <div class="seg" id="news-region" role="tablist"><button type="button" data-v="all" class="active">All</button><button type="button" data-v="global"><span data-icon="globe"></span>Global</button><button type="button" data-v="indonesia"><span data-icon="flag"></span>Indonesia</button></div>
         <div class="chip-row" id="news-cat"><button type="button" data-v="all" class="chip active">All</button><button type="button" data-v="market" class="chip">Market</button><button type="button" data-v="financial" class="chip">Financial</button><button type="button" data-v="geopolitical" class="chip">Geopolitical</button><button type="button" data-v="ai" class="chip ai" hidden>AI picks</button></div>
       </div>
       <div class="side-list" id="news-list"><div class="loading"><span class="spin"></span>Loading headlines…</div></div>

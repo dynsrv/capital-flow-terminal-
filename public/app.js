@@ -49,6 +49,8 @@
     swap: '<path d="M7 16V4M3 8l4-4 4 4"/><path d="M17 8v12M21 16l-4 4-4-4"/>',
     book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7M9 11h5"/>',
     chev: '<path d="m6 9 6 6 6-6"/>',
+    flag: '<path d="M4 22V4"/><path d="M4 4h14v9H4"/><path d="M4 8.5h14"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
     vol: '<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>',
     volx: '<path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6M16 9l6 6"/>',
     arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
@@ -380,7 +382,9 @@
   const dayLabel = (iso) => { if (!iso) return 'Undated'; const d = new Date(iso); const t = new Date(); const diff = Math.floor((Date.UTC(t.getFullYear(), t.getMonth(), t.getDate()) - Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())) / 86400e3); return diff <= 0 ? 'Today' : diff === 1 ? 'Yesterday' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }); };
   function newsItem(it) {
     const pick = it.curated;
-    return `<a class="news-item ${pick ? 'pick' : ''}" href="${esc(it.link)}" target="_blank" rel="noopener"><div class="nt">${esc(it.title)}</div><div class="nm"><span class="src">${esc(it.source)}</span><span>${it.publishedAt ? fmt.ago(it.publishedAt) : ''}</span><span class="ct ${it.cat}">${it.cat}</span><span class="rg">${it.region === 'indonesia' ? 'ID' : 'Global'}</span>${pick ? '<span class="badge ai">AI pick</span>' : ''}</div>${pick && it.why ? `<div class="why">${esc(it.why)}</div>` : ''}${pick && it.assets && it.assets.length ? `<div class="assets">${it.assets.slice(0, 6).map(a => `<span>${esc(a)}</span>`).join('')}</div>` : ''}</a>`;
+    const t = it.publishedAt ? new Date(it.publishedAt) : null;
+    const hhmm = t ? t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : '';
+    return `<a class="news-item ${pick ? 'pick' : ''}" href="${esc(it.link)}" target="_blank" rel="noopener"><div class="nh"><div class="nt">${esc(it.title)}</div>${t ? `<time class="ntime" datetime="${esc(it.publishedAt)}" title="${esc(t.toLocaleString())} · ${fmt.ago(it.publishedAt)}">${hhmm}</time>` : ''}</div><div class="nm"><span class="src">${esc(it.source)}</span><span class="ago">${t ? fmt.ago(it.publishedAt) : ''}</span><span class="ct ${it.cat}">${it.cat}</span><span class="rg">${it.region === 'indonesia' ? 'ID' : 'Global'}</span>${pick ? '<span class="badge ai">AI pick</span>' : ''}</div>${pick && it.why ? `<div class="why">${esc(it.why)}</div>` : ''}${pick && it.assets && it.assets.length ? `<div class="assets">${it.assets.slice(0, 6).map(a => `<span>${esc(a)}</span>`).join('')}</div>` : ''}</a>`;
   }
   function drawNews() {
     const n = state.news; const box = $('#news-list'); const d = n.data; if (!d) return;
@@ -887,7 +891,7 @@
       const r = await api('/intel/reading');
       const rd = r.reading;
       meta.innerHTML = rd ? `<span class="badge ${r.stale ? 'mid' : 'measured'}" title="${esc(r.why.join('; ') || 'Reading matches the current data')}">${r.stale ? 'may be outdated' : 'current'}</span><span class="xs muted">${fmt.ago(rd.generatedAt)} · ${esc(rd.model)} · ${rd.trigger === 'schedule' ? 'scheduled' : 'manual'}</span>` : '';
-      if (!rd) { box.innerHTML = `<div class="callout">${ic('info')}<div>No AI reading has been generated yet.${isAdmin ? ' Choose a model and press <b>Refresh reading</b>.' : ' An administrator can generate one or switch on the daily schedule.'}</div></div>`; return; }
+      if (!rd) { box.innerHTML = `<div class="ai-empty">${ic('intel')}<b>No AI reading yet</b><p>${isAdmin ? 'Choose a model and press <b>Refresh reading</b> above.' : 'A reading appears here after the next scheduled run, or when an administrator generates one.'}</p></div>`; return; }
       renderFindings(rd, box);
       if (r.stale && r.why.length) box.insertAdjacentHTML('afterbegin', `<div class="callout warn">${ic('alert')}<div><b>Since this reading was generated:</b> ${esc(r.why.join('; '))}.${isAdmin ? ' Press Refresh reading to update it.' : ''}</div></div>`);
     } catch (e) { box.innerHTML = errorBox(e.message); }
@@ -1174,8 +1178,7 @@
     const termCard = (x) => {
       const id = slug(x.t); const open = g.open.has(x.t);
       return `<article class="gl-term ${open ? 'open' : ''}" id="${id}" data-t="${esc(x.t)}">
-        <button type="button" class="gl-h" aria-expanded="${open}"><span class="gl-t"><b>${esc(x.t)}</b>${x.aka ? `<span class="gl-aka">${esc(x.aka.join(' · '))}</span>` : ''}</span><span class="gl-chev">${ic('chev')}</span></button>
-        <p class="gl-s">${esc(x.s)}</p>
+        <button type="button" class="gl-h" aria-expanded="${open}"><span class="gl-t"><b>${esc(x.t)}</b>${x.aka ? `<span class="gl-aka">${esc(x.aka.join(' · '))}</span>` : ''}</span><span class="gl-s">${esc(x.s)}</span><span class="gl-chev">${ic('chev')}</span></button>
         <div class="gl-d">
           <p>${esc(x.d)}</p>
           ${x.x ? `<div class="gl-x"><span class="lab">In this dashboard</span><p>${esc(x.x)}</p></div>` : ''}
@@ -1190,7 +1193,7 @@
       for (const [k, label, desc] of secs) {
         const items = G.terms.filter(x => x.cat === k && match(x, q)).sort((a, b) => q ? (b.t.toLowerCase().includes(q) - a.t.toLowerCase().includes(q)) || a.t.localeCompare(b.t) : 0);
         if (!items.length) continue; n += items.length;
-        html += `<section class="gl-sec"><div class="gl-sec-h"><h3>${esc(label)}</h3><span class="xs muted">${esc(desc)} · ${items.length}</span></div><div class="gl-grid">${items.map(termCard).join('')}</div></section>`;
+        html += `<section class="card gl-sec"><div class="gl-sec-h"><h3>${esc(label)}</h3><span class="xs muted">${esc(desc)}</span><span class="gl-count">${items.length}</span></div><div class="gl-list">${items.map(termCard).join('')}</div></section>`;
       }
       $('#gl-body').innerHTML = html || `<section class="card"><div class="card-b">${emptyState(`No term matches "${g.q}". Try a shorter word, or ask the AI reading on Intelligence.`, 'search')}</div></section>`;
     }
