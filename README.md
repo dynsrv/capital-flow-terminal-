@@ -47,6 +47,18 @@ Or, with wrangler: `npm install && npm run dev`.
 
 Smoke test: `node local/check.mjs` hits every API route and reports source status.
 
+## Deploy to Vercel (current production)
+
+Production: **https://capital-flow-terminal-dyn-srv.vercel.app** (Vercel project `capital-flow-terminal`, team DynSrv).
+
+The API runs as a single Edge Function (`api/index.js` wraps the same Worker code); the UI is served statically.
+Two ways to deploy:
+
+1. **Git-linked (recommended once the Vercel GitHub integration is installed):** import `dynsrv/capital-flow-terminal-` in the Vercel dashboard; zero config — Vercel detects `api/` and `public/` and reads `vercel.json`.
+2. **Bootstrap build (what is deployed now, no GitHub integration needed):** `deploy/vercel/build.sh` clones this repo at build time and emits a Build Output API bundle. Redeploy from the Vercel dashboard ("Redeploy" on the latest deployment) or push the two files in `deploy/vercel/` with `vercel deploy --prod`. The build always pulls the latest `main`.
+
+Environment variables (Vercel → Settings → Environment Variables): `ADMIN_TOKEN` (set), `DEMO_MODE=false`, plus any optional keys from the table above. Add `KV_REST_API_URL` / `KV_REST_API_TOKEN` (Upstash Redis via the Vercel Marketplace) to make the cache and Admin-entered keys persist across function instances; without it the cache is per-instance memory and Admin keys should be set as environment variables instead.
+
 ## Deploy to Cloudflare Workers
 
 ```bash

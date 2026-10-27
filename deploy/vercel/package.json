@@ -1,0 +1,1 @@
+{ "name": "capital-flow-terminal-bootstrap", "private": true, "type": "module", "scripts": { "build": "bash build.sh" } }
