@@ -14,7 +14,7 @@ import { testCredential } from './keytest.js';
 import { preCrash } from './precrash.js';
 import { getReading, refreshReading, scheduledRefresh, listModels, listReadings } from './reading.js';
 import { fetchNews, curateNews, getCurated, SOURCES as NEWS_SOURCES } from './news.js';
-import { getStreams, saveStreams, resetStreams, DEFAULT_STREAMS } from './tv.js';
+import { getChannels, saveChannels, resetChannels, hlsRelay, DEFAULT_CHANNELS } from './tv.js';
 import { publicConfig, rtQuotes, coverage, rtSettings, PROVIDERS, RT_MAP } from './realtime.js';
 
 // CORS so the published artifact (or any front-end) can call this API.
@@ -91,7 +91,8 @@ async function handleApi(request, env, url) {
     if (p === '/analytics/leaders') return wrap(await R.leaders(ctx, url.searchParams.get('anchor') || 'SPX'));
     if (p === '/intel/reading') return wrap(await getReading(ctx));
     if (p === '/news') { const [feed, curated] = await Promise.all([fetchNews(ctx), getCurated(ctx)]); return wrap({ ...feed, curated, aiCuration: (config.keys.NEWS_AI_CURATION || 'off') !== 'off' }); }
-    if (p === '/tv/streams') return wrap(await getStreams(ctx));
+    if (p === '/tv/channels' || p === '/tv/streams') return wrap(await getChannels(ctx));
+    if (p === '/hls') return hlsRelay(ctx, request, url);
     if (p === '/rt/config') return wrap(publicConfig(config));
     if (p === '/rt/quotes') { const r = await rtQuotes(ctx); return json({ ok: true, generatedAt: new Date().toISOString(), ms: Date.now() - started, ...r }, 200, r.enabled ? { 'cache-control': `public, s-maxage=${Math.max(2, r.intervalSec - 1)}, stale-while-revalidate=${r.intervalSec}` } : { 'cache-control': 'public, s-maxage=30' }); }
     if (p === '/intel/explain') {
@@ -130,8 +131,8 @@ async function handleApi(request, env, url) {
       if (p === '/admin/models') return wrap(await listModels(config));
       if (p === '/admin/news-curate' && request.method === 'POST') { const body = await request.json().catch(() => ({})); return wrap({ curated: await curateNews(ctx, { model: body.model }) }); }
       if (p === '/admin/news-sources') return wrap({ sources: NEWS_SOURCES.map(({ id, name, region, cat, url }) => ({ id, name, region, cat, url })) });
-      if (p === '/admin/tv' && request.method === 'GET') return wrap({ ...(await getStreams(ctx)), defaults: DEFAULT_STREAMS });
-      if (p === '/admin/tv' && request.method === 'POST') { const body = await request.json().catch(() => ({})); return wrap(body.reset ? await resetStreams(ctx) : await saveStreams(ctx, body.streams)); }
+      if (p === '/admin/tv' && request.method === 'GET') return wrap({ ...(await getChannels(ctx)), defaults: DEFAULT_CHANNELS });
+      if (p === '/admin/tv' && request.method === 'POST') { const body = await request.json().catch(() => ({})); return wrap(body.reset ? await resetChannels(ctx) : await saveChannels(ctx, body.channels)); }
       if (p === '/admin/realtime') { const st = rtSettings(config); const cov = coverage(st); return wrap({ settings: { enabled: st.enabled, intervalSec: st.intervalSec, crypto: st.crypto, configured: st.configured, tdCredits: st.tdCredits }, coverage: Object.keys(RT_MAP).map(id => ({ id, ...(cov[id] || { provider: null }), options: Object.keys(RT_MAP[id]) })), providers: PROVIDERS, probe: st.enabled ? await rtQuotes(ctx) : null }); }
       if (p === '/admin/readings') return wrap({ readings: await listReadings(env) });
       if (p === '/admin/store') {

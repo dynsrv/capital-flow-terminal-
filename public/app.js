@@ -49,6 +49,8 @@
     swap: '<path d="M7 16V4M3 8l4-4 4 4"/><path d="M17 8v12M21 16l-4 4-4-4"/>',
     book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7M9 11h5"/>',
     chev: '<path d="m6 9 6 6 6-6"/>',
+    vol: '<path d="M11 5 6 9H2v6h4l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14"/>',
+    volx: '<path d="M11 5 6 9H2v6h4l5 4z"/><path d="m22 9-6 6M16 9l6 6"/>',
     arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
     news: '<path d="M4 4h12a2 2 0 0 1 2 2v12a2 2 0 0 0 2 2H6a2 2 0 0 1-2-2z"/><path d="M18 8h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2"/><path d="M8 8h6M8 12h6M8 16h4"/>',
     tv: '<rect x="2" y="7" width="20" height="13" rx="2"/><path d="m17 2-5 5-5-5"/>',
@@ -129,6 +131,9 @@
   const CLS_COLOR = (T) => { const S = series(T); return { equity: S[0], rates: S[1], credit: S[5], crypto: S[3], commodity: S[2], fx: S[6], macro: T.fg3 }; };
   const shade = (hex, f) => { const h = hex.replace('#', ''); const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16); const r = n >> 16, g = (n >> 8) & 255, b = n & 255; const m = (c) => Math.round(f < 0 ? c * (1 + f) : c + (255 - c) * f); return '#' + [m(r), m(g), m(b)].map(x => x.toString(16).padStart(2, '0')).join(''); };
 
+  // Blend two hex colours (t = share of b). Used for the softer, gradient fills of the capital-concentration view.
+  const blend = (a, b, t) => { const p = (h) => { const x = h.replace('#', ''); const n = parseInt(x.length === 3 ? x.split('').map(c => c + c).join('') : x, 16); return [n >> 16, (n >> 8) & 255, n & 255]; }; const A = p(a), B = p(b); return '#' + A.map((v, i) => Math.round(v + (B[i] - v) * t).toString(16).padStart(2, '0')).join(''); };
+  const softFill = (hex, T) => { const base = T.dark ? T.surface : '#ffffff'; return T.dark ? [blend(hex, base, 0.42), blend(hex, base, 0.68)] : [blend(hex, base, 0.30), blend(hex, base, 0.58)]; };
   // Text colour that stays readable on a given fill: black on light fills (mint, orange), white on dark ones.
   const inkOn = (hex) => { const h = String(hex || '').replace('#', ''); if (h.length !== 6) return '#fff'; const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255).map(c => c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4); return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.32 ? '#000' : '#fff'; };
   /* ───────── Title Case for titles and labels ─────────
@@ -400,34 +405,95 @@
   $('#news-cat').onclick = e => { const b = e.target.closest('button'); if (!b) return; state.news.cat = b.dataset.v; drawNews(); };
   $('#news-refresh').onclick = () => loadNews(true);
 
-  /* ═════════════════════ SIDEBAR: LIVE TV ═════════════════════ */
+  /* ═════════════════════ SIDEBAR: LIVE TV (HLS) ═════════════════════
+     Broadcasters' own .m3u8 streams played with hls.js (Safari plays HLS natively). Each channel has sources tried
+     in order: direct first (no server traffic), then the /api/hls relay. hls.js loads only when something plays. */
+  const LIVE_SITE = 'https://capital-flow-terminal-dyn-srv.vercel.app';
   const tvCur = () => state.tv.streams.find(s => s.id === state.tv.current) || state.tv.streams[0];
-  const canEmbed = !(SNAP && !apiBase) && (() => { try { return window.self === window.top || !!document.featurePolicy; } catch (e) { return true; } })();
-  const tvPoster = (s, big = false) => `<div class="tv-poster" data-play="1"><span class="play">${ic('play')}</span><b>${esc(s.name)}</b><span>${canEmbed ? 'Click to play (muted)' : 'Embedded playback is not available in this viewer'}</span>${canEmbed ? '' : `<a href="${esc(s.watch)}" target="_blank" rel="noopener">Open the live stream on YouTube</a>`}</div>`;
-  const tvIframe = (s) => `<iframe src="${esc(s.embed)}" title="${esc(s.name)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+  const canEmbed = !(SNAP && !apiBase);
+  let hlsLoader = null;
+  function loadHls() {
+    if (window.Hls) return Promise.resolve(window.Hls);
+    if (hlsLoader) return hlsLoader;
+    hlsLoader = new Promise((res, rej) => {
+      const add = (src, next) => { const el = document.createElement('script'); el.src = src; el.async = true; el.onload = () => (window.Hls ? res(window.Hls) : next()); el.onerror = next; document.head.appendChild(el); };
+      add('https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.20/hls.light.min.js', () => add('/vendor/hls.light.min.js', () => { hlsLoader = null; rej(new Error('Player library unavailable')); }));
+    });
+    return hlsLoader;
+  }
+  const relayBase = () => (apiBase ? apiBase.replace(/\/$/, '') : '') + '/api/hls?u=';
+  function stopPlayer(box) { if (box && box._player) { box._player.destroy(); box._player = null; } }
+  /** Play channel `ch` inside `box`. Tries each source; reports status on the tile. */
+  function playChannel(box, ch, { muted = true } = {}) {
+    stopPlayer(box);
+    box.innerHTML = `<video playsinline autoplay ${muted ? 'muted' : ''}></video>
+      <div class="tv-status"><span class="spin"></span><span class="tv-msg">Connecting to ${esc(ch.name)}…</span></div>
+      <div class="tv-ui"><span class="tv-live"><i></i>Live</span><span class="tv-name">${esc(ch.name)}</span><button type="button" class="tv-btn" data-mute aria-label="Toggle sound">${ic(muted ? 'volx' : 'vol')}</button><button type="button" class="tv-btn" data-fs aria-label="Full screen">${ic('expand')}</button></div>`;
+    const video = $('video', box); video.muted = muted;
+    const srcs = ch.sources.map(x => (x.relay ? relayBase() + encodeURIComponent(x.url) : x.url));
+    let i = 0, hls = null, timer = null, dead = false;
+    const status = (msg, cls = '') => { const st = $('.tv-status', box); if (!st) return; st.className = 'tv-status ' + cls; st.hidden = !msg; if (msg) $('.tv-msg', st).textContent = msg; const sp = $('.spin', st); if (sp) sp.hidden = cls === 'err'; };
+    const syncMute = () => { const b = $('[data-mute]', box); if (b) b.innerHTML = ic(video.muted ? 'volx' : 'vol'); };
+    const fail = () => {
+      if (dead) return; clearTimeout(timer); i++;
+      if (i < srcs.length) { start(); return; }
+      status(`${ch.name} is not broadcasting right now, or its stream address has changed.`, 'err');
+      box.classList.add('off');
+    };
+    const tryPlay = () => video.play().catch(() => { if (!video.muted) { video.muted = true; syncMute(); video.play().catch(() => {}); } });
+    async function start() {
+      if (dead) return;
+      status(i ? 'Trying the backup route…' : `Connecting to ${ch.name}…`);
+      if (hls) { hls.destroy(); hls = null; }
+      clearTimeout(timer); timer = setTimeout(fail, 15000);
+      const src = srcs[i];
+      let Hls = null; try { Hls = await loadHls(); } catch (e) { Hls = null; }
+      if (dead) return;
+      if (Hls && Hls.isSupported()) {
+        hls = new Hls({ maxBufferLength: 20, liveSyncDurationCount: 3, manifestLoadingTimeOut: 10000, levelLoadingTimeOut: 10000, fragLoadingTimeOut: 15000, capLevelToPlayerSize: true });
+        hls.on(Hls.Events.ERROR, (_, d) => { if (!d.fatal) return; if (d.type === Hls.ErrorTypes.MEDIA_ERROR) { hls.recoverMediaError(); return; } fail(); });
+        hls.on(Hls.Events.MANIFEST_PARSED, tryPlay);
+        hls.loadSource(src); hls.attachMedia(video);
+      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        video.src = src; video.onerror = fail; tryPlay();
+      } else { status('This browser cannot play live streams.', 'err'); }
+    }
+    video.addEventListener('playing', () => { clearTimeout(timer); status(''); box.classList.remove('off'); });
+    video.addEventListener('waiting', () => status('Buffering…'));
+    box.onclick = (e) => {
+      if (e.target.closest('[data-mute]')) { video.muted = !video.muted; if (!video.muted) tryPlay(); syncMute(); return; }
+      if (e.target.closest('[data-fs]')) { const el = box; (el.requestFullscreen || el.webkitRequestFullscreen || (() => video.webkitEnterFullscreen && video.webkitEnterFullscreen())).call(el); return; }
+    };
+    box._player = { destroy() { dead = true; clearTimeout(timer); if (hls) hls.destroy(); try { video.pause(); video.removeAttribute('src'); video.load(); } catch (e) {} } };
+    start();
+  }
+  const tvPoster = (s) => `<div class="tv-poster" data-play="1"><span class="play">${ic('play')}</span><b>${esc(s.name)}</b><span>${canEmbed ? esc(s.where || 'Live') : 'Live TV plays on the live terminal'}</span>${canEmbed ? '' : `<a href="${LIVE_SITE}" target="_blank" rel="noopener">Open the live terminal</a>`}</div>`;
   function drawTv() {
-    const t = state.tv; const s = tvCur(); if (!s) { $('#tv-frame').innerHTML = emptyState('No streams configured', 'tv'); return; }
-    const opts = (sel) => { const groups = {}; t.streams.forEach(x => (groups[x.group] ||= []).push(x)); sel.innerHTML = Object.entries(groups).map(([g, arr]) => `<optgroup label="${esc(g)}">${arr.map(x => `<option value="${x.id}" ${x.id === s.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</optgroup>`).join(''); };
+    const t = state.tv; const s = tvCur(); if (!s) { $('#tv-frame').innerHTML = emptyState('No channels configured', 'tv'); return; }
+    const opts = (sel) => { const groups = {}; t.streams.forEach(x => (groups[x.group] ||= []).push(x)); sel.innerHTML = Object.entries(groups).map(([g, arr]) => `<optgroup label="${esc(g)}">${arr.map(x => `<option value="${x.id}" ${x.id === s.id ? 'selected' : ''}>${esc(x.name)}${x.where ? ' · ' + esc(x.where) : ''}</option>`).join('')}</optgroup>`).join(''); };
     opts($('#tv-select')); opts($('#tv-modal-select'));
-    const modalOpen = !$('#tv-modal').hidden;
-    $('#tv-frame').innerHTML = t.playing && canEmbed && !modalOpen ? tvIframe(s) : tvPoster(s);
-    if (modalOpen) { $('#tv-modal-frame').innerHTML = canEmbed ? tvIframe(s) : tvPoster(s); $('#tv-modal-yt').href = s.watch; }
+    const modalOpen = !$('#tv-modal').hidden; const frame = $('#tv-frame');
+    if (t.playing && canEmbed && !modalOpen && !document.hidden) playChannel(frame, s, { muted: true }); else { stopPlayer(frame); frame.innerHTML = tvPoster(s); }
+    if (modalOpen) { const mf = $('#tv-modal-frame'); if (canEmbed) playChannel(mf, s, { muted: false }); else mf.innerHTML = tvPoster(s); }
+    const links = $('#tv-links'); if (links) links.innerHTML = (t.links || []).length ? `Also: ${t.links.map(l => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.name)}</a>`).join(' · ')}` : '';
   }
-  function openTvModal() { const s = tvCur(); if (!s) return; $('#tv-modal').hidden = false; state.tv.playing = true; drawTv(); }
-  function closeTvModal() { const m = $('#tv-modal'); if (m.hidden) return; m.hidden = true; $('#tv-modal-frame').innerHTML = ''; drawTv(); }
-  function popOutTv() { const s = tvCur(); if (!s) return; const base = apiBase ? apiBase.replace(/\/$/, '') : ''; const w = window.open(`${base}/tv.html?c=${encodeURIComponent(s.id)}`, 'cft-tv', 'popup=yes,width=960,height=600,resizable=yes'); if (!w) { toast('Pop-up blocked by the browser'); return; } state.tv.playing = false; closeTvModal(); drawTv(); }
+  function openTvModal() { const s = tvCur(); if (!s) return; stopPlayer($('#tv-frame')); $('#tv-modal').hidden = false; state.tv.playing = true; drawTv(); }
+  function closeTvModal() { const m = $('#tv-modal'); if (m.hidden) return; stopPlayer($('#tv-modal-frame')); m.hidden = true; $('#tv-modal-frame').innerHTML = ''; drawTv(); }
+  function popOutTv() { const s = tvCur(); if (!s) return; const base = apiBase ? apiBase.replace(/\/$/, '') : (canEmbed ? '' : LIVE_SITE); const w = window.open(`${base}/tv.html?c=${encodeURIComponent(s.id)}`, 'cft-tv', 'popup=yes,width=960,height=600,resizable=yes'); if (!w) { toast('Pop-up blocked by the browser'); return; } state.tv.playing = false; closeTvModal(); drawTv(); }
   async function loadTv() {
-    try { const r = await api('/tv/streams'); state.tv.streams = r.streams || []; if (!tvCur()) state.tv.current = state.tv.streams[0] && state.tv.streams[0].id; drawTv(); }
-    catch (e) { $('#tv-frame').innerHTML = emptyState('Stream list unavailable', 'tv'); }
+    try { const r = await api('/tv/channels'); state.tv.streams = r.channels || []; state.tv.links = r.links || []; if (!tvCur()) state.tv.current = state.tv.streams[0] && state.tv.streams[0].id; drawTv(); }
+    catch (e) { $('#tv-frame').innerHTML = emptyState('Channel list unavailable', 'tv'); }
   }
-  const pickTv = (id) => { state.tv.current = id; store.set('cft:tv', id); drawTv(); };
+  const pickTv = (id) => { state.tv.current = id; store.set('cft:tv', id); if (!$('#tv-modal').hidden || state.tv.playing) state.tv.playing = true; drawTv(); };
   $('#tv-select').onchange = e => pickTv(e.target.value);
   $('#tv-modal-select').onchange = e => pickTv(e.target.value);
-  $('#tv-frame').onclick = e => { if (e.target.closest('[data-play]') && !e.target.closest('a')) { if (!canEmbed) return; state.tv.playing = true; drawTv(); } };
-  $('#tv-modal-frame').onclick = e => { if (e.target.closest('[data-play]') && !e.target.closest('a') && canEmbed) { $('#tv-modal-frame').innerHTML = tvIframe(tvCur()); } };
+  $('#tv-frame').addEventListener('click', e => { if (e.target.closest('[data-play]') && !e.target.closest('a')) { if (!canEmbed) return; state.tv.playing = true; drawTv(); } });
+  $('#tv-modal-frame').addEventListener('click', e => { if (e.target.closest('[data-play]') && !e.target.closest('a') && canEmbed) playChannel($('#tv-modal-frame'), tvCur(), { muted: false }); });
   $('#tv-max').onclick = openTvModal; $('#tv-modal-close').onclick = closeTvModal;
   $('#news-tv').onclick = () => { haptic(); openTvModal(); };
   $('#tv-pop').onclick = popOutTv; $('#tv-modal-pop').onclick = popOutTv;
+  // save data: stop streams while the tab is hidden, resume when it is visible again
+  document.addEventListener('visibilitychange', () => { if (!state.tv.playing) return; if (document.hidden) { stopPlayer($('#tv-frame')); stopPlayer($('#tv-modal-frame')); } else drawTv(); });
 
   /* ───────── analysis renderers ───────── */
   const peerMove = (p) => p.move == null ? 'n/a' : p.unit === 'bp' ? `${p.move > 0 ? '+' : ''}${Math.round(p.move)} bp` : fmt.pct(p.move);
@@ -479,10 +545,14 @@
     const T = tok(); const COL = { EQ_GLOBAL: T.c1, FI_GLOBAL: T.c2, GOLD_STOCK: T.c3, CRYPTO_TOTAL: T.c4 };
     const KID = { EQ_US: shade(T.c1, -0.3), FI_US: shade(T.c2, -0.35) };
     const total = o.sizes.reduce((s, z) => s + (z.usd || 0), 0);
-    $('#size-strip').innerHTML = o.sizes.map(z => `<div class="strip-seg ${total && z.usd / total < 0.12 ? 'narrow' : ''}" style="flex:${z.usd || 0};background:${COL[z.id]};color:${inkOn(COL[z.id])};box-shadow:inset 0 0 0 1px rgba(255,255,255,.10)" title="${esc(z.label)}: ${fmt.usd(z.usd)} (${total ? (z.usd / total * 100).toFixed(1) : '—'}%)"><span>${esc(z.label)}</span><b>${fmt.usd(z.usd)} · ${total ? Math.round(z.usd / total * 100) : '—'}%</b></div>`).join('');
+    // softer fills: the palette colour blended toward the card surface as a diagonal gradient, with a hairline in the full colour
+    const rgba = (hex, a) => { const n = parseInt(hex.replace('#', ''), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
+    const softCss = (hex) => { const [a, b] = softFill(hex, T); return `background:linear-gradient(135deg, ${a}, ${b});color:${inkOn(a)};box-shadow:inset 0 0 0 1px ${rgba(hex, .45)}, inset 3px 0 0 ${hex}`; };
+    const softItem = (hex) => { const [a, b] = softFill(hex, T); return { itemStyle: { color: window.echarts ? new echarts.graphic.LinearGradient(0, 0, 1, 1, [{ offset: 0, color: a }, { offset: 1, color: b }]) : a, borderColor: rgba(hex, .5), borderWidth: 1 }, label: { color: inkOn(a) } }; };
+    $('#size-strip').innerHTML = o.sizes.map(z => `<div class="strip-seg ${total && z.usd / total < 0.12 ? 'narrow' : ''}" style="flex:${z.usd || 0};${softCss(COL[z.id])}" title="${esc(z.label)}: ${fmt.usd(z.usd)} (${total ? (z.usd / total * 100).toFixed(1) : '—'}%)"><span>${esc(z.label)}</span><b>${fmt.usd(z.usd)} · ${total ? Math.round(z.usd / total * 100) : '—'}%</b></div>`).join('');
     $('#size-legend').innerHTML = o.sizes.map(z => `<span><i class="dot" style="background:${COL[z.id]};border-radius:3px"></i>${esc(z.label)}</span>`).join('');
     const leaves = [];
-    for (const z of o.sizes) { const kids = (z.children || []).filter(c => c.usd > 0 && c.usd / total >= 0.04); if (kids.length) kids.forEach((c) => leaves.push({ name: c.label, value: c.usd, grp: z.label, ref: { ...c, measure: z.measure, source: z.source, asOf: z.asOf, live: z.live }, itemStyle: { color: KID[c.id] || COL[z.id] }, label: { color: inkOn(KID[c.id] || COL[z.id]) } })); else leaves.push({ name: z.id === 'GOLD_STOCK' ? 'Gold' : z.id === 'CRYPTO_TOTAL' ? 'Crypto' : z.label, value: z.usd || 0, grp: z.label, ref: z, itemStyle: { color: COL[z.id] }, label: { color: inkOn(COL[z.id]) } }); }
+    for (const z of o.sizes) { const kids = (z.children || []).filter(c => c.usd > 0 && c.usd / total >= 0.04); if (kids.length) kids.forEach((c) => leaves.push({ name: c.label, value: c.usd, grp: z.label, ref: { ...c, measure: z.measure, source: z.source, asOf: z.asOf, live: z.live }, ...softItem(KID[c.id] || COL[z.id]) })); else leaves.push({ name: z.id === 'GOLD_STOCK' ? 'Gold' : z.id === 'CRYPTO_TOTAL' ? 'Crypto' : z.label, value: z.usd || 0, grp: z.label, ref: z, ...softItem(COL[z.id]) }); }
     chart('#treemap', { tooltip: { formatter: p => { const r = p.data.ref || {}; return `<b>${esc(p.name)}</b><br>${fmt.usd(p.value)} · ${(p.value / total * 100).toFixed(1)}% of total<br><span style="opacity:.7">${esc(String(r.measure || '').replace(/_/g, ' '))}${r.live ? ' · live' : r.source ? ' · ' + esc(r.source) : ''}</span>`; } }, series: [{ type: 'treemap', roam: false, nodeClick: false, breadcrumb: { show: false }, left: 0, right: 0, top: 0, bottom: 0, squareRatio: 1.2, label: { show: true, overflow: 'truncate', fontFamily: T.mono, fontSize: 12, color: '#fff', lineHeight: 17, formatter: p => p.value / total < 0.03 ? '' : `{n|${titleCase(p.name)}}\n{v|${fmt.usd(p.value)}}`, rich: { n: { fontSize: 12 }, v: { fontSize: 15, fontWeight: 600 } } }, levels: [{ itemStyle: { borderColor: T.surface, borderWidth: 0, gapWidth: 4 } }, { itemStyle: { borderColor: 'rgba(255,255,255,.10)', borderWidth: 1, borderRadius: 6 } }], data: leaves }] });
     $('#treemap-note').innerHTML = o.sizes.map(s => `<b>${esc(s.label)}</b> ${esc(s.measure.replace(/_/g, ' '))}, ${s.live ? 'live' : 'reference'} (${esc(s.note || s.source)}${s.asOf ? ', ' + esc(String(s.asOf).slice(0, 10)) : ''})${s.error ? ` <span class="down">${/429/.test(s.error) ? 'source rate-limited, retrying shortly' : 'source unavailable'}</span>` : ''}`).join(' · ') + '. Market cap, debt outstanding and physical stock value are different measures and none of them is a capital flow.';
 
@@ -933,11 +1003,19 @@
     const box = $('#adm-tv');
     try {
       const r = await api('/admin/tv', { headers: hdr() });
-      const row = (s = {}) => `<div class="tv-row"><input type="text" data-f="name" placeholder="Channel name" value="${esc(s.name || '')}" aria-label="Name"><input type="text" data-f="group" placeholder="Group" value="${esc(s.group || '')}" aria-label="Group" style="flex:0 1 110px"><input type="text" data-f="channel" placeholder="YouTube channel ID (UC…) or video ID" value="${esc(s.channel || s.video || '')}" aria-label="YouTube channel or video ID" class="mono"><button type="button" class="icon-btn sm" data-del aria-label="Remove">${ic('x')}</button></div>`;
-      box.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px"><p class="xs muted">${r.custom ? `Custom list saved ${fmt.ago(r.updatedAt)}.` : 'Showing the built-in list.'} Each entry embeds the channel's current live broadcast; a video ID embeds that video instead.</p><div id="tv-rows">${r.streams.map(row).join('')}</div><div class="row-actions"><button class="btn ghost" id="tv-add">Add channel</button><button class="btn" id="tv-save">Save channels</button><button class="btn ghost" id="tv-reset">Reset to defaults</button></div></div>`;
+      const orig = new Map(r.channels.map(c => [c.id, c]));
+      const row = (c = {}) => { const first = (c.sources || [])[0] || {}; const relayOnly = (c.sources || []).length > 0 && (c.sources || []).every(x => x.relay); return `<div class="tv-row" data-id="${esc(c.id || '')}"><input type="text" data-f="name" placeholder="Channel name" value="${esc(c.name || '')}" aria-label="Name"><input type="text" data-f="group" placeholder="Group" value="${esc(c.group || '')}" aria-label="Group" style="flex:0 1 120px"><input type="text" data-f="url" placeholder="https://…/playlist.m3u8" value="${esc(first.url || '')}" aria-label="Stream address (.m3u8)" class="mono"><label class="xs dim tv-relay"><input type="checkbox" data-f="relay" ${relayOnly ? 'checked' : ''}> relay only</label><button type="button" class="icon-btn sm" data-del aria-label="Remove">${ic('x')}</button></div>`; };
+      box.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px"><p class="xs muted">${r.custom ? `Custom list saved ${fmt.ago(r.updatedAt)}.` : 'Showing the built-in list.'} Each channel is a broadcaster's own HLS address (.m3u8). The player tries it directly first and falls back to this site's relay; tick <b>relay only</b> for broadcasters that block other websites. Find current addresses at <a href="https://github.com/iptv-org/iptv" target="_blank" rel="noopener">github.com/iptv-org/iptv</a>.</p><div id="tv-rows">${r.channels.map(row).join('')}</div><div class="row-actions"><button class="btn ghost" id="tv-add">Add channel</button><button class="btn" id="tv-save">Save channels</button><button class="btn ghost" id="tv-reset">Reset to defaults</button></div></div>`;
       $('#tv-rows').onclick = e => { const b = e.target.closest('[data-del]'); if (b) b.closest('.tv-row').remove(); };
       $('#tv-add').onclick = () => $('#tv-rows').insertAdjacentHTML('beforeend', row());
-      $('#tv-save').onclick = async () => { const streams = $$('#tv-rows .tv-row').map(r => { const g = (f) => $(`[data-f="${f}"]`, r).value.trim(); const id = g('channel'); return { name: g('name'), group: g('group') || 'Other', channel: /^UC/.test(id) ? id : '', video: /^UC/.test(id) ? '' : id }; }); try { await api('/admin/tv', { method: 'POST', headers: hdr(), body: JSON.stringify({ streams }) }); toast('Channels saved'); loadTv(); renderAdminTv(hdr); } catch (e) { toast(e.message); } };
+      $('#tv-save').onclick = async () => {
+        const channels = $$('#tv-rows .tv-row').map(rw => {
+          const g = (f) => $(`[data-f="${f}"]`, rw); const o = orig.get(rw.dataset.id); const url = g('url').value.trim(); const relay = g('relay').checked;
+          const same = o && o.sources && o.sources[0] && o.sources[0].url === url && (o.sources.every(x => x.relay) === relay);
+          return { id: rw.dataset.id || undefined, name: g('name').value.trim(), group: g('group').value.trim() || 'Other', where: o ? o.where : '', referer: o ? o.referer : undefined, sources: same ? o.sources : [{ url, relay }] };
+        });
+        try { await api('/admin/tv', { method: 'POST', headers: hdr(), body: JSON.stringify({ channels }) }); toast('Channels saved'); loadTv(); renderAdminTv(hdr); } catch (e) { toast(e.message); }
+      };
       $('#tv-reset').onclick = async () => { try { await api('/admin/tv', { method: 'POST', headers: hdr(), body: JSON.stringify({ reset: true }) }); toast('Channel list reset'); loadTv(); renderAdminTv(hdr); } catch (e) { toast(e.message); } };
     } catch (e) { box.innerHTML = errorBox(e.message); }
   }

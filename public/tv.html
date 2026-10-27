@@ -5,34 +5,51 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Live TV · Capital Flow Terminal</title>
 <meta name="robots" content="noindex">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
   :root { color-scheme: dark; }
-  html, body { margin: 0; height: 100%; background: #07090d; color: #e6ebf2; font: 12.5px/1.4 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace; }
+  html, body { margin: 0; height: 100%; background: #000; color: #f2f2f2; font: 12.5px/1.4 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace; }
   body { display: flex; flex-direction: column; }
-  header { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #10141c; border-bottom: 1px solid #20283a; }
-  header b { font-size: 13px; white-space: nowrap; }
-  select { flex: 1 1 auto; max-width: 420px; height: 32px; background: #151a24; color: inherit; border: 1px solid #2c3549; border-radius: 7px; padding: 0 8px; font: inherit; }
-  a { color: #a2aec0; font-size: 12px; white-space: nowrap; margin-left: auto; }
-  .frame { flex: 1 1 auto; min-height: 0; background: #000; }
-  iframe { width: 100%; height: 100%; border: 0; display: block; }
-  .msg { padding: 24px; color: #a2aec0; text-align: center; }
+  header { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #0b0b0d; border-bottom: 1px solid #222227; }
+  header b { white-space: nowrap; color: #fb8b1e; }
+  select { flex: 1 1 auto; max-width: 460px; height: 32px; background: #121215; color: inherit; border: 1px solid #303037; border-radius: 7px; padding: 0 8px; font: inherit; }
+  button { height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid #303037; background: #121215; color: inherit; font: inherit; cursor: pointer; }
+  .frame { position: relative; flex: 1 1 auto; min-height: 0; background: #000; }
+  video { width: 100%; height: 100%; display: block; background: #000; }
+  .msg { position: absolute; inset: 0; display: grid; place-items: center; color: #b4b4ba; text-align: center; padding: 24px; pointer-events: none; }
 </style>
 </head>
 <body>
-<header><b>Live TV</b><select id="sel" aria-label="Channel"></select><a id="yt" href="#" target="_blank" rel="noopener">Open on YouTube ↗</a></header>
-<div class="frame" id="frame"><div class="msg">Loading channel list…</div></div>
+<header><b>Live TV</b><select id="sel" aria-label="Channel"></select><button id="mute">Sound on</button></header>
+<div class="frame"><video id="v" playsinline autoplay muted></video><div class="msg" id="msg">Loading channel list…</div></div>
 <script>
 (async () => {
-  const q = new URLSearchParams(location.search); let cur = q.get('c');
-  let streams = [];
-  try { const r = await fetch('/api/tv/streams'); const j = await r.json(); streams = j.streams || []; } catch (e) {}
-  if (!streams.length) { document.getElementById('frame').innerHTML = '<div class="msg">Could not load the channel list.</div>'; return; }
-  const sel = document.getElementById('sel'); const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  sel.innerHTML = streams.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
-  const play = () => { const s = streams.find(x => x.id === cur) || streams[0]; cur = s.id; sel.value = s.id; document.title = s.name + ' · Live TV'; document.getElementById('yt').href = s.watch; document.getElementById('frame').innerHTML = `<iframe src="${esc(s.embed.replace('mute=1', 'mute=0'))}" title="${esc(s.name)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`; history.replaceState(null, '', '?c=' + encodeURIComponent(s.id)); };
-  sel.onchange = () => { cur = sel.value; play(); };
-  play();
+  const $ = (id) => document.getElementById(id); const v = $('v'); const msg = (t) => { $('msg').textContent = t || ''; $('msg').style.display = t ? 'grid' : 'none'; };
+  const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  let chans = []; try { const j = await (await fetch('/api/tv/channels')).json(); chans = j.channels || []; } catch (e) {}
+  if (!chans.length) return msg('Could not load the channel list.');
+  const loadHls = () => new Promise((res) => { if (window.Hls) return res(window.Hls); const add = (src, next) => { const s = document.createElement('script'); s.src = src; s.onload = () => res(window.Hls || null); s.onerror = next; document.head.appendChild(s); }; add('https://cdnjs.cloudflare.com/ajax/libs/hls.js/1.5.20/hls.light.min.js', () => add('/vendor/hls.light.min.js', () => res(null))); });
+  const Hls = await loadHls();
+  const groups = {}; chans.forEach(c => (groups[c.group] ||= []).push(c));
+  $('sel').innerHTML = Object.entries(groups).map(([g, a]) => `<optgroup label="${esc(g)}">${a.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</optgroup>`).join('');
+  let hls = null, cur = new URLSearchParams(location.search).get('c'), i = 0, timer;
+  const play = (c) => {
+    const srcs = c.sources.map(s => s.relay ? '/api/hls?u=' + encodeURIComponent(s.url) : s.url);
+    const next = () => { clearTimeout(timer); i++; if (i < srcs.length) go(); else msg(c.name + ' is not broadcasting right now, or its address has changed.'); };
+    const go = () => {
+      msg(i ? 'Trying the backup route…' : 'Connecting to ' + c.name + '…'); if (hls) { hls.destroy(); hls = null; }
+      timer = setTimeout(next, 15000);
+      if (Hls && Hls.isSupported()) { hls = new Hls({ maxBufferLength: 30, liveSyncDurationCount: 3 }); hls.on(Hls.Events.ERROR, (_, d) => { if (!d.fatal) return; if (d.type === Hls.ErrorTypes.MEDIA_ERROR) return hls.recoverMediaError(); next(); }); hls.on(Hls.Events.MANIFEST_PARSED, () => v.play().catch(() => {})); hls.loadSource(srcs[i]); hls.attachMedia(v); }
+      else if (v.canPlayType('application/vnd.apple.mpegurl')) { v.src = srcs[i]; v.onerror = next; v.play().catch(() => {}); }
+      else msg('This browser cannot play live streams.');
+    };
+    i = 0; go();
+  };
+  v.addEventListener('playing', () => { clearTimeout(timer); msg(''); });
+  $('mute').onclick = () => { v.muted = !v.muted; $('mute').textContent = v.muted ? 'Sound on' : 'Mute'; v.play().catch(() => {}); };
+  const pick = () => { const c = chans.find(x => x.id === cur) || chans[0]; cur = c.id; $('sel').value = c.id; document.title = c.name + ' · Live TV'; history.replaceState(null, '', '?c=' + encodeURIComponent(c.id)); play(c); };
+  $('sel').onchange = () => { cur = $('sel').value; pick(); };
+  pick();
 })();
 </script>
 </body>

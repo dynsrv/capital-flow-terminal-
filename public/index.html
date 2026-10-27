@@ -63,7 +63,8 @@
       </div>
       <select id="tv-select" aria-label="Choose a channel"></select>
       <div class="tv-frame" id="tv-frame"></div>
-      <p class="xs muted" id="tv-note">Streams play from YouTube, muted. If a channel is not broadcasting, YouTube shows its own notice.</p>
+      <p class="xs muted" id="tv-note">Broadcasters' own live streams. Tap the speaker for sound.</p>
+      <p class="xs tv-links" id="tv-links"></p>
     </section>
     <div class="side-resize" id="side-resize" role="separator" aria-orientation="vertical" aria-label="Resize news and TV panel" tabindex="0" title="Drag to resize · double-click to reset"></div>
   </aside>
@@ -103,7 +104,7 @@
   <div class="drawer-b" id="drawer-body"></div>
 </aside>
 <div id="tv-modal" class="tv-modal" hidden role="dialog" aria-modal="true" aria-label="Live TV">
-  <div class="tv-modal-h"><select id="tv-modal-select" aria-label="Choose a channel"></select><div class="row-actions"><a class="btn ghost" id="tv-modal-yt" target="_blank" rel="noopener">Open on YouTube</a><button class="btn ghost" id="tv-modal-pop">Pop out</button></div><button class="icon-btn" id="tv-modal-close" aria-label="Close" data-icon="x"></button></div>
+  <div class="tv-modal-h"><select id="tv-modal-select" aria-label="Choose a channel"></select><div class="row-actions"><button class="btn ghost" id="tv-modal-pop" data-icon="popout"> Pop out</button></div><button class="icon-btn" id="tv-modal-close" aria-label="Close" data-icon="x"></button></div>
   <div class="tv-modal-b" id="tv-modal-frame"></div>
 </div>
 <div id="toast" class="toast" hidden></div>
