@@ -952,3 +952,69 @@ body.rt-on .live { color: var(--up); }
 .ui-prev .ui-num { font-size: calc(12px * var(--fs, 1)); color: var(--fg-2); }
 .ui-prev .ui-num i { font-style: normal; }
 @media (max-width: 420px) { .ui-font { grid-template-columns: 18px minmax(0, 1fr); } .ui-prev { grid-column: 2; align-items: flex-start; text-align: left; } }
+
+/* ═════════════════════ market hours chips (header, desktop) ═════════════════════ */
+.sessions { display: flex; align-items: center; gap: 4px; margin-right: 6px; }
+.ses { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border-radius: 6px; border: 1px solid var(--head-line); font-size: calc(11px * var(--fs, 1)); font-weight: 600; color: var(--fg-2); white-space: nowrap; }
+.ses i { width: 6px; height: 6px; border-radius: 50%; background: var(--fg-3); opacity: .6; }
+.ses em { font-style: normal; font-weight: 500; color: var(--fg-3); }
+.ses.open { color: var(--fg); }
+.ses.open i { background: var(--up); opacity: 1; box-shadow: 0 0 0 3px color-mix(in srgb, var(--up) 22%, transparent); }
+.ses.open em { color: var(--up); }
+.ses.lunch i { background: var(--warn); opacity: 1; }
+.ses.lunch em { color: var(--warn); }
+@media (max-width: 1360px) { .ses em { display: none; } }
+@media (max-width: 1199px) { .sessions { display: none; } }
+
+/* ═════════════════════ search palette ═════════════════════ */
+.search-pane { position: fixed; z-index: 58; left: 50%; top: 72px; transform: translateX(-50%); width: min(640px, calc(100vw - 32px)); max-height: min(70vh, 640px); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line-2); border-radius: 14px; box-shadow: 0 24px 64px rgba(0, 0, 0, .5); overflow: hidden; animation: fade .15s ease-out; }
+.sp-h { display: flex; align-items: center; gap: 8px; padding: 10px; border-bottom: 1px solid var(--line); }
+.sp-field { flex: 1 1 auto; max-width: none; }
+.sp-field input { height: 42px; font-size: calc(14px * var(--fs, 1)); border-radius: 10px; }
+.sp-b { overflow-y: auto; overscroll-behavior: contain; padding: 4px 6px 10px; }
+.sp-sec { font-size: calc(11px * var(--fs, 1)); font-weight: 700; color: var(--fg-3); padding: 12px 8px 4px; }
+.sp-item { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: center; gap: 10px; width: 100%; padding: 8px; border: 0; border-radius: 8px; background: transparent; color: var(--fg); text-align: left; }
+.sp-item:hover, .sp-item:focus-visible { background: var(--surface-2); }
+.sp-item > svg.i { color: var(--fg-3); }
+.sp-ic { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--raised); color: var(--fg-2); }
+.sp-t { display: flex; flex-direction: column; min-width: 0; }
+.sp-t b { font-size: calc(13px * var(--fs, 1)); }
+.sp-t span { font-size: calc(11.5px * var(--fs, 1)); color: var(--fg-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-r { display: flex; flex-direction: column; align-items: flex-end; font-size: calc(12px * var(--fs, 1)); }
+.app-title .at-sub { display: none; }
+
+/* ═════════════════════ phone header v2: brand + market hours, collapsing page title, search ═════════════════════ */
+@media (max-width: 759px) {
+  .topbar { background: var(--head-bg); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .top-row { gap: 10px; min-height: 56px; padding-top: 4px; padding-bottom: 4px; }
+  .top-row .brand { display: flex !important; flex: none; }
+  .topbar .logo { width: 34px; height: 34px; border-radius: 9px; }
+  .topbar .logo svg.i { width: 18px; height: 18px; }
+  .app-title { display: flex; flex-direction: column; justify-content: center; gap: 2px; flex: 1 1 auto; min-width: 0; opacity: 1; transform: none; }
+  .at-main { position: relative; display: block; height: 1.3em; overflow: hidden; font-size: calc(15px * var(--fs, 1)); line-height: 1.3; }
+  .at-main b { position: absolute; inset: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; transition: transform .22s ease, opacity .22s ease; }
+  .at-page { transform: translateY(100%); opacity: 0; }
+  .topbar.titled .at-brand { transform: translateY(-100%); opacity: 0; }
+  .topbar.titled .at-page { transform: none; opacity: 1; }
+  .app-title .at-sub { display: flex; gap: 10px; font-size: calc(10.5px * var(--fs, 1)); color: var(--fg-3); white-space: nowrap; overflow: hidden; }
+  .at-sub span { display: inline-flex; align-items: center; gap: 4px; }
+  .at-sub i { width: 5px; height: 5px; border-radius: 50%; background: var(--fg-3); opacity: .6; }
+  .at-sub .open { color: var(--fg-2); }
+  .at-sub .open i { background: var(--up); opacity: 1; }
+  .at-sub .lunch i { background: var(--warn); opacity: 1; }
+  .top-actions { gap: 6px; }
+  #search-btn { width: 38px; height: 38px; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--head-line); color: var(--fg); }
+  #search-btn svg.i { width: 18px; height: 18px; }
+  .top-actions .live { margin: 0; }
+  body.rt-on .live::after { content: ""; }
+  body.rt-on .live { padding: 0 4px; }
+  .live .dot { width: 8px; height: 8px; }
+  .sessions { display: none; }
+  /* search goes full screen on phones */
+  .search-pane { inset: 0; top: 0; left: 0; transform: none; width: 100vw; max-height: none; height: 100%; border-radius: 0; border: 0; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); animation: sheet-up .2s ease-out; }
+  .sp-h { padding: 10px 12px; }
+  .sp-item { padding: 10px 8px; }
+}
+@media (max-width: 380px) { .at-sub span:nth-child(3) { display: none; } }
+.sp-field input { background: var(--surface-2); border: 1px solid var(--line-2); }
+.sp-field input:focus, .sp-field input:focus-visible { outline: none; border-color: #fb8b1e; box-shadow: 0 0 0 3px color-mix(in srgb, #fb8b1e 18%, transparent); }

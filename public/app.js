@@ -210,7 +210,7 @@
 
   /* overlay management */
   function openScrim(onClose) { const s = $('#scrim'); s.hidden = false; s.onclick = () => { closeOverlays(); onClose && onClose(); }; }
-  function closeOverlays() { $('#scrim').hidden = true; $('#drawer').hidden = true; $('#popover').hidden = true; $('#side').classList.remove('open'); const sh = $('#sheet'); if (sh) sh.hidden = true; document.body.classList.remove('news-open', 'sheet-open'); closeTvModal(); syncTabs(); }
+  function closeOverlays() { $('#scrim').hidden = true; $('#drawer').hidden = true; $('#popover').hidden = true; $('#side').classList.remove('open'); const sh = $('#sheet'); if (sh) sh.hidden = true; const sp = $('#search'); if (sp) sp.hidden = true; document.body.classList.remove('news-open', 'sheet-open', 'search-open'); closeTvModal(); syncTabs(); }
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeOverlays(); });
 
   /* asset picker popover */
@@ -1186,6 +1186,60 @@
     };
   }
 
+  /* ═════════════════════ MARKET HOURS (header) ═════════════════════
+     Regular trading hours in each exchange's own time zone; exchange holidays are not modelled. */
+  const SESSIONS = [
+    { id: 'NY', name: 'New York', tz: 'America/New_York', days: { 1: [[570, 960]], 2: [[570, 960]], 3: [[570, 960]], 4: [[570, 960]], 5: [[570, 960]] } },
+    { id: 'LDN', name: 'London', tz: 'Europe/London', days: { 1: [[480, 990]], 2: [[480, 990]], 3: [[480, 990]], 4: [[480, 990]], 5: [[480, 990]] } },
+    { id: 'JKT', name: 'Jakarta', tz: 'Asia/Jakarta', days: { 1: [[540, 720], [810, 960]], 2: [[540, 720], [810, 960]], 3: [[540, 720], [810, 960]], 4: [[540, 720], [810, 960]], 5: [[540, 690], [840, 960]] } },
+  ];
+  const WD = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  function sessionState(x, now = new Date()) {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: x.tz, weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(now).map(p => [p.type, p.value]));
+    const d = WD[parts.weekday]; const m = Number(parts.hour) * 60 + Number(parts.minute);
+    const today = x.days[d] || [];
+    for (const [a, b] of today) if (m >= a && m < b) return { open: true, mins: b - m, brk: today.length > 1 && b < today[today.length - 1][1] };
+    for (let k = 0; k < 8; k++) { const ses = x.days[(d + k) % 7] || []; for (const [a] of ses) { const t = k * 1440 + a - m; if (t > 0) return { open: false, mins: t, lunch: k === 0 && today.some(([, b]) => b <= m) && today.some(([a2]) => a2 > m) }; } }
+    return { open: false, mins: null };
+  }
+  const dur = (mm) => mm == null ? '' : mm >= 1440 ? `${Math.round(mm / 1440)}d` : mm >= 60 ? `${Math.floor(mm / 60)}h ${String(mm % 60).padStart(2, '0')}m` : `${mm}m`;
+  function renderSessions() {
+    const st = SESSIONS.map(x => ({ x, s: sessionState(x) }));
+    const box = $('#sessions');
+    if (box) box.innerHTML = st.map(({ x, s }) => `<span class="ses ${s.open ? 'open' : s.lunch ? 'lunch' : ''}" title="${esc(x.name)}: ${s.open ? `open, closes in ${dur(s.mins)}` : s.lunch ? `lunch break, reopens in ${dur(s.mins)}` : `closed, opens in ${dur(s.mins)}`} (regular hours, holidays not shown)"><i></i>${x.id}<em>${s.open ? dur(s.mins) : s.lunch ? 'break' : 'closed'}</em></span>`).join('');
+    const sub = $('#app-sub');
+    if (sub) sub.innerHTML = st.map(({ x, s }) => `<span class="${s.open ? 'open' : s.lunch ? 'lunch' : ''}"><i></i>${x.id} ${s.open ? dur(s.mins) : s.lunch ? 'break' : 'closed'}</span>`).join('');
+  }
+  renderSessions(); setInterval(renderSessions, 30000);
+
+  /* ═════════════════════ SEARCH (instruments, pages, glossary) ═════════════════════ */
+  function openSearch() {
+    closeOverlays(); const pane = $('#search'); pane.hidden = false; document.body.classList.add('search-open'); openScrim(closeSearch);
+    const q = $('#sp-q'); q.value = ''; drawSearch(''); setTimeout(() => q.focus(), 30);
+  }
+  function closeSearch() { $('#search').hidden = true; document.body.classList.remove('search-open'); $('#scrim').hidden = true; }
+  function drawSearch(qs) {
+    const q = qs.trim().toLowerCase(); const out = [];
+    const rows = (state.perf || []).filter(r => !q || (r.id + ' ' + r.name).toLowerCase().includes(q)).slice(0, q ? 12 : 8);
+    if (rows.length) out.push(`<div class="sp-sec">${q ? 'Instruments' : 'Watchlist and markets'}</div>` + rows.map(r => { const c = isDiff(r) ? r.change : r.pct1d; return `<button type="button" class="sp-item" data-inst="${r.id}"><span class="sp-ic">${ic(VIEWS.monitor.icon)}</span><span class="sp-t"><b>${r.id}</b><span>${esc(r.name)}</span></span><span class="sp-r mono"><span>${fmt.px(r.price)}</span><span class="${tone(c)}">${isDiff(r) ? fmt.bp(c) : fmt.pct(c)}</span></span></button>`; }).join(''));
+    const pages = Object.entries(VIEWS).filter(([k, v]) => k !== 'admin' && (!q || (v.label + ' ' + v.title).toLowerCase().includes(q)));
+    if (pages.length) out.push(`<div class="sp-sec">Pages</div>` + pages.slice(0, q ? 6 : 9).map(([k, v]) => `<button type="button" class="sp-item" data-go="${k}"><span class="sp-ic">${ic(v.icon)}</span><span class="sp-t"><b>${esc(v.label)}</b><span>${esc(v.sub)}</span></span>${ic('arrow')}</button>`).join(''));
+    const G = window.CFT_GLOSSARY; if (q && G) { const t = G.terms.filter(x => (x.t + ' ' + (x.aka || []).join(' ')).toLowerCase().includes(q)).slice(0, 5); if (t.length) out.push(`<div class="sp-sec">Glossary</div>` + t.map(x => `<button type="button" class="sp-item" data-term="${esc(x.t)}"><span class="sp-ic">${ic('book')}</span><span class="sp-t"><b>${esc(x.t)}</b><span>${esc(x.s)}</span></span>${ic('arrow')}</button>`).join('')); }
+    $('#sp-list').innerHTML = out.join('') || emptyState(`Nothing matches "${qs}"`, 'search');
+  }
+  $('#sp-q').addEventListener('input', e => drawSearch(e.target.value));
+  $('#sp-q').addEventListener('keydown', e => { if (e.key === 'Enter') { const f = $('#sp-list .sp-item'); if (f) f.click(); } if (e.key === 'Escape') closeSearch(); });
+  $('#sp-close').onclick = closeSearch;
+  $('#sp-list').onclick = (e) => {
+    const b = e.target.closest('.sp-item'); if (!b) return;
+    closeSearch();
+    if (b.dataset.inst) openDrawer(b.dataset.inst);
+    else if (b.dataset.go) show(b.dataset.go);
+    else if (b.dataset.term) { state.gloss = state.gloss || { q: '', cat: 'all', open: new Set() }; state.gloss.q = b.dataset.term; state.gloss.open.add(b.dataset.term); show('glossary'); }
+  };
+  $('#search-btn').onclick = () => { haptic(); openSearch(); };
+  document.addEventListener('keydown', e => { if (e.key === '/' && !/input|textarea|select/i.test((document.activeElement || {}).tagName || '') && $('#search').hidden) { e.preventDefault(); openSearch(); } });
+
   /* ═════════════════════ APPEARANCE (admin-set font and text size) ═════════════════════ */
   const FONT_CSS = { classic: 'IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700', modern: 'Inter:wght@400;500;600;700;800' };
   function applyUI(ui, rerender = true) {
@@ -1207,7 +1261,7 @@
     $$('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
     $$('.view').forEach(s => s.classList.toggle('active', s.id === 'view-' + view));
     $('#page-title').textContent = meta.title; $('#page-sub').textContent = meta.sub; document.title = `${meta.label} · Capital Flow Terminal`;
-    $('#app-title').textContent = titleCase(meta.title); $('.topbar').classList.remove('titled'); syncTabs();
+    $('#app-title-page').textContent = titleCase(meta.title); $('.topbar').classList.remove('titled'); syncTabs();
     if (location.hash.slice(1) !== view) history.replaceState(null, '', '#' + view);
     window.scrollTo({ top: 0 });
     $$('.view:not(.active) .ch, .view:not(.active) [id$="-chart"], .view:not(.active) .ch-mini').forEach(n => { const c = window.echarts && echarts.getInstanceByDom(n); if (c) { if (ro) ro.unobserve(n); c.dispose(); } });

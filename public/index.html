@@ -23,11 +23,13 @@ try { var u = JSON.parse(localStorage.getItem('cft:ui') || 'null'); if (u) { var
 <header class="topbar">
   <div class="top-row">
     <a class="brand" href="#overview"><span class="logo" data-icon="logo"></span><div class="brand-t"><b>Capital Flow</b><span>Market intelligence terminal</span></div></a>
-    <div class="app-title" id="app-title" aria-hidden="true"></div>
+    <div class="app-title" id="app-title"><span class="at-main"><b class="at-brand">Capital Flow</b><b class="at-page" id="app-title-page" aria-hidden="true"></b></span><span class="at-sub" id="app-sub"></span></div>
     <nav class="nav" id="nav" aria-label="Main navigation"></nav>
     <div class="top-actions">
       <button id="regime-pill" class="pill mid" title="Rules-based market regime"><i class="dot"></i><span>Regime …</span></button>
       <button id="stress-pill" class="pill" title="Composite market stress index (0–100)"><i class="dot"></i><span>Stress …</span></button>
+      <div class="sessions" id="sessions" aria-label="Market hours"></div>
+      <button id="search-btn" class="icon-btn" title="Search (press /)" aria-label="Search instruments, pages and terms" data-icon="search"></button>
       <span class="live" title="Quotes refresh every 60 seconds"><i class="dot"></i><span id="updated">—</span></span>
       <button id="side-btn" class="icon-btn" title="News & TV" aria-label="Open news and TV panel" data-icon="news"></button>
       <button id="connect-btn" class="icon-btn" title="Connect to a deployed API" aria-label="Connect to a deployed API" data-icon="link"></button>
@@ -108,6 +110,10 @@ try { var u = JSON.parse(localStorage.getItem('cft:ui') || 'null'); if (u) { var
 <div id="tv-modal" class="tv-modal" hidden role="dialog" aria-modal="true" aria-label="Live TV">
   <div class="tv-modal-h"><select id="tv-modal-select" aria-label="Choose a channel"></select><div class="row-actions"><button class="btn ghost" id="tv-modal-pop" data-icon="popout"> Pop out</button></div><button class="icon-btn" id="tv-modal-close" aria-label="Close" data-icon="x"></button></div>
   <div class="tv-modal-b" id="tv-modal-frame"></div>
+</div>
+<div id="search" class="search-pane" hidden role="dialog" aria-modal="true" aria-label="Search">
+  <div class="sp-h"><label class="search sp-field"><span data-icon="search"></span><input type="search" id="sp-q" placeholder="Search instruments, pages, terms" autocomplete="off" enterkeyhint="go"></label><button class="btn ghost" id="sp-close">Cancel</button></div>
+  <div class="sp-b" id="sp-list"></div>
 </div>
 <div id="toast" class="toast" hidden></div>
 <script src="/glossary.js"></script>
