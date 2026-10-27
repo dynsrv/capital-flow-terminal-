@@ -24,7 +24,7 @@ function ctxFor(env, config) { return { env, config, cache: createCache(env) }; 
 function withStore(env) { if (!env.__store) { try { env.__store = createStore(env); } catch (e) { env.__store = null; } } return env; }
 
 // CDN cache policy for public GET routes (seconds). Admin, cron and POST routes are never cached.
-const CDN_TTL = [[/^\/rt\/config/, 30], [/^\/quotes/, 30], [/^\/performance|^\/overview|^\/analytics\/regime|^\/news|^\/tv/, 120], [/^\/history/, 600], [/^\/analytics|^\/shock|^\/flows/, 300], [/^\/risk|^\/intel/, 300], [/^\/universe|^\/health/, 60]];
+const CDN_TTL = [[/^\/ui$/, 60], [/^\/rt\/config/, 30], [/^\/quotes/, 30], [/^\/performance|^\/overview|^\/analytics\/regime|^\/news|^\/tv/, 120], [/^\/history/, 600], [/^\/analytics|^\/shock|^\/flows/, 300], [/^\/risk|^\/intel/, 300], [/^\/universe|^\/health/, 60]];
 function cdnHeaders(p, method) { if (method !== 'GET' || p.startsWith('/admin') || p.startsWith('/cron')) return {}; const hit = CDN_TTL.find(([re]) => re.test(p)); return hit ? { 'cache-control': `public, s-maxage=${hit[1]}, stale-while-revalidate=${hit[1] * 4}` } : {}; }
 
 /** Daily state snapshot: what the dashboard itself read today (quotes, regime, stress, anomalies, signals). */
@@ -93,6 +93,7 @@ async function handleApi(request, env, url) {
     if (p === '/news') { const [feed, curated] = await Promise.all([fetchNews(ctx), getCurated(ctx)]); return wrap({ ...feed, curated, aiCuration: (config.keys.NEWS_AI_CURATION || 'off') !== 'off' }); }
     if (p === '/tv/channels' || p === '/tv/streams') return wrap(await getChannels(ctx));
     if (p === '/hls') return hlsRelay(ctx, request, url);
+    if (p === '/ui') { const font = ['terminal', 'classic', 'modern'].includes(config.keys.UI_FONT) ? config.keys.UI_FONT : 'terminal'; const size = ['small', 'default', 'large', 'x-large'].includes(config.keys.UI_FONT_SIZE) ? config.keys.UI_FONT_SIZE : 'default'; return wrap({ font, size, scale: { small: 0.92, default: 1, large: 1.08, 'x-large': 1.16 }[size] }); }
     if (p === '/rt/config') return wrap(publicConfig(config));
     if (p === '/rt/quotes') { const r = await rtQuotes(ctx); return json({ ok: true, generatedAt: new Date().toISOString(), ms: Date.now() - started, ...r }, 200, r.enabled ? { 'cache-control': `public, s-maxage=${Math.max(2, r.intervalSec - 1)}, stale-while-revalidate=${r.intervalSec}` } : { 'cache-control': 'public, s-maxage=30' }); }
     if (p === '/intel/explain') {

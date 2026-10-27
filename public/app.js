@@ -176,10 +176,11 @@
     let c = echarts.getInstanceByDom(node);
     if (!c) { c = echarts.init(node, null, { renderer: 'canvas' }); if (ro) ro.observe(node); }
     const T = tok();
-    c.setOption({ backgroundColor: 'transparent', textStyle: { fontFamily: T.mono, color: T.fg2, fontSize: 11 }, animationDuration: 350, tooltip: { backgroundColor: T.surface, borderColor: T.line2, textStyle: { color: T.fg, fontSize: 12 }, extraCssText: 'border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);' }, ...option, ...(option.tooltip ? { tooltip: { backgroundColor: T.surface, borderColor: T.line2, textStyle: { color: T.fg, fontSize: 12 }, extraCssText: 'border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);', ...option.tooltip } } : {}) }, true);
+    c.setOption({ backgroundColor: 'transparent', textStyle: { fontFamily: T.mono, color: T.fg2, fontSize: 11 * fs() }, animationDuration: 350, tooltip: { backgroundColor: T.surface, borderColor: T.line2, textStyle: { color: T.fg, fontSize: 12 }, extraCssText: 'border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);' }, ...option, ...(option.tooltip ? { tooltip: { backgroundColor: T.surface, borderColor: T.line2, textStyle: { color: T.fg, fontSize: 12 }, extraCssText: 'border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);', ...option.tooltip } } : {}) }, true);
     return c;
   }
-  const axis = (T, extra = {}) => ({ axisLine: { lineStyle: { color: T.line2 } }, axisTick: { show: false }, axisLabel: { color: T.fg3, fontSize: 10.5 }, splitLine: { lineStyle: { color: T.line, type: 'dashed' } }, ...extra });
+  const fs = () => Number(getComputedStyle(document.documentElement).getPropertyValue('--fs')) || 1;
+  const axis = (T, extra = {}) => ({ axisLine: { lineStyle: { color: T.line2 } }, axisTick: { show: false }, axisLabel: { color: T.fg3, fontSize: 10.5 * fs() }, splitLine: { lineStyle: { color: T.line, type: 'dashed' } }, ...extra });
   const narrow = () => window.innerWidth < 760;
 
   const areaSpark = (vals, w = 240, h = 42) => {
@@ -935,6 +936,7 @@
       ${card({ icon: 'key', title: 'API credentials', sub: 'Stored server-side; values are never shown in full', body: `<div class="form-row"><label for="adm-token">Admin token</label><div class="inline"><input type="password" id="adm-token" value="${esc(a.token)}" placeholder="ADMIN_TOKEN" autocomplete="off"><button class="btn" id="adm-unlock">Unlock</button></div><div class="help">Kept in this browser tab only.</div></div><div id="adm-fields"></div>` })}
       <div style="display:flex;flex-direction:column;gap:var(--gap);min-width:0">
         ${card({ icon: 'intel', title: 'AI reading', sub: 'Generate or schedule the market reading shown on the Intelligence page', body: '<div id="adm-ai"><p class="dim">Unlock to manage.</p></div>' })}
+        ${card({ icon: 'book', title: 'Appearance', sub: 'Font and text size for everyone who opens the terminal', body: '<div id="adm-ui"><p class="dim">Unlock to change.</p></div>' })}
         ${card({ icon: 'pulse', title: 'Real-time data', sub: 'Optional live prices: switch on and add keys in the Real-time group of the credentials panel', body: '<div id="adm-rt"><p class="dim">Unlock to view.</p></div>' })}
         ${card({ icon: 'news', title: 'News curation', sub: 'Optional: let a model rank and annotate the sidebar headlines', body: '<div id="adm-news"><p class="dim">Unlock to manage.</p></div>' })}
         ${card({ icon: 'tv', title: 'Live TV channels', sub: 'YouTube channels offered in the sidebar player', body: '<div id="adm-tv"><p class="dim">Unlock to edit.</p></div>' })}
@@ -946,8 +948,8 @@
       a.token = $('#adm-token').value; try { sessionStorage.setItem('cft:admin', a.token); } catch (e) {}
       try {
         const [k, st, sz] = await Promise.all([api('/admin/keys', { headers: hdr() }), api('/admin/status', { headers: hdr() }), api('/admin/sizes', { headers: hdr() })]);
-        const groups = {}; k.fields.forEach(f => (groups[f.group] ||= []).push(f));
-        const gIcon = { AI: 'intel', Search: 'search', Data: 'db', 'Real-time': 'pulse' };
+        const groups = {}; k.fields.filter(f => f.group !== 'Appearance').forEach(f => (groups[f.group] ||= []).push(f));
+        const gIcon = { Appearance: 'book', AI: 'intel', Search: 'search', Data: 'db', 'Real-time': 'pulse' };
         $('#adm-fields').innerHTML = Object.entries(groups).map(([g, fs]) => `<div class="nav-label" style="padding:18px 0 4px;display:flex;align-items:center;gap:6px">${ic(gIcon[g] || 'key')}${esc(g)}</div>` + fs.map(f => {
           const status = f.configured ? `<span class="badge measured">${f.secret === false ? esc(f.value) : 'set'}${f.fromEnv ? ' · env' : ''}</span>` : '<span class="badge">not set</span>';
           const input = f.options ? `<select id="k-${f.key}" data-key="${f.key}"><option value="">${esc(f.value ? 'Keep: ' + f.value : 'Default: ' + (f.placeholder || ''))}</option>${f.options.map(o => `<option value="${o}">${o}</option>`).join('')}</select>` : `<input id="k-${f.key}" type="${f.secret === false ? 'text' : 'password'}" data-key="${f.key}" placeholder="${esc(f.secret === false ? (f.value || f.placeholder || '') : (f.value || 'Paste key'))}" autocomplete="off">`;
@@ -961,7 +963,7 @@
           catch (err) { out.className = 'test-out bad'; out.innerHTML = `${ic('alert')}<span>${esc(err.message)}</span>`; }
           finally { b.disabled = false; }
         };
-        $('#adm-save').onclick = async () => { const upd = {}; $$('#adm-fields [data-key]').forEach(i => { if (i.value) upd[i.dataset.key] = i.value === 'clear' ? '' : i.value; }); if (!Object.keys(upd).length) return toast('Nothing to save'); try { await api('/admin/keys', { method: 'POST', headers: hdr(), body: JSON.stringify(upd) }); toast('Credentials saved'); unlock(); startRt(); } catch (e) { toast(e.message); } };
+        $('#adm-save').onclick = async () => { const upd = {}; $$('#adm-fields [data-key]').forEach(i => { if (i.value) upd[i.dataset.key] = i.value === 'clear' ? '' : i.value; }); if (!Object.keys(upd).length) return toast('Nothing to save'); try { await api('/admin/keys', { method: 'POST', headers: hdr(), body: JSON.stringify(upd) }); toast('Credentials saved'); unlock(); startRt(); loadUI(); } catch (e) { toast(e.message); } };
         try {
           const rd = await api('/intel/reading'); const cur = rd.reading;
           $('#adm-ai').innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
@@ -975,7 +977,7 @@
           $('#adm-ai-run').onclick = async (e) => { const b = e.currentTarget; b.disabled = true; const old = b.innerHTML; b.innerHTML = `<span class="spin" style="width:12px;height:12px"></span>Refreshing…`; try { const r = await api('/admin/ai-refresh', { method: 'POST', headers: hdr(), body: JSON.stringify({ model: $('#adm-ai-model').value || undefined, question: $('#adm-ai-q').value || undefined }) }); toast(`Reading refreshed with ${r.reading.model}`); unlock(); } catch (err) { toast(err.message); b.disabled = false; b.innerHTML = old; } };
           $$('#adm-ai [data-go]').forEach(x => x.onclick = () => show(x.dataset.go));
         } catch (e) { $('#adm-ai').innerHTML = errorBox(e.message); }
-        renderAdminNews(hdr); renderAdminTv(hdr); renderAdminStore(hdr); renderAdminRealtime(hdr);
+        renderAdminUI(hdr); renderAdminNews(hdr); renderAdminTv(hdr); renderAdminStore(hdr); renderAdminRealtime(hdr);
         $('#adm-status').innerHTML = `<div class="tbl"><table class="t"><thead><tr><th>Source</th><th class="num">OK</th><th class="num">Failed</th><th class="num">Stale</th></tr></thead><tbody>${Object.entries(st.bySource).map(([s, x]) => `<tr><td><span style="display:inline-flex;gap:8px;align-items:center"><i class="dot ${x.failed ? 'bad' : 'ok'}"></i>${esc(s)}</span>${x.errors.length ? `<div class="xs muted">${x.errors.map(esc).join('<br>')}</div>` : ''}</td><td class="num up">${x.ok}</td><td class="num ${x.failed ? 'down' : 'muted'}">${x.failed}</td><td class="num ${x.stale ? 'down' : 'muted'}">${x.stale}</td></tr>`).join('')}</tbody></table></div><div id="adm-store" style="margin:10px 0"></div><button class="btn ghost" id="adm-clear">${ic('refresh')}Clear cache</button>`;
         $('#adm-clear').onclick = async () => { try { const r = await api('/admin/cache/clear', { method: 'POST', headers: hdr() }); toast(`Cleared ${r.cleared} cache entries`); } catch (e) { toast(e.message); } };
         $('#adm-sizes').innerHTML = sz.references.filter(r => r.id !== 'CRYPTO_TOTAL').map(r => `<div class="form-row"><label>${esc(r.label)} <span class="xs muted">${esc(r.measure.replace(/_/g, ' '))}</span></label><div class="inline"><input type="number" data-sz="${r.id}" data-f="${r.tonnes ? 'tonnes' : 'usd'}" placeholder="${r.tonnes ? r.tonnes + ' tonnes' : (r.usd / 1e12).toFixed(1) + ' $T'}" value="${r.override ? (r.override.tonnes || r.override.usd / 1e12) : ''}" aria-label="${esc(r.label)} value"><input type="text" data-szs="${r.id}" placeholder="${esc(r.source)}" value="${esc(r.override?.source || '')}" aria-label="Source"><input type="text" data-sza="${r.id}" placeholder="${esc(r.asOf)}" value="${esc(r.override?.asOf || '')}" aria-label="As of" style="flex:0 1 90px"></div></div>`).join('') + `<div class="row-actions" style="margin-top:12px"><button class="btn" id="adm-size-save">Save reference data</button></div>`;
@@ -986,6 +988,30 @@
     if (a.token) unlock();
   }
 
+  async function renderAdminUI(hdr) {
+    const box = $('#adm-ui'); if (!box) return;
+    let cur; try { cur = await api('/ui'); } catch (e) { box.innerHTML = errorBox(e.message); return; }
+    const sel = { font: cur.font, size: cur.size };
+    const SCALE = { small: 0.92, default: 1, large: 1.08, 'x-large': 1.16 };
+    const FONTS = [
+      ['terminal', 'Terminal', 'JetBrains Mono throughout', "'JetBrains Mono', monospace", "'JetBrains Mono', monospace"],
+      ['classic', 'Classic', 'IBM Plex Sans + Plex Mono (original)', "'IBM Plex Sans', sans-serif", "'IBM Plex Mono', monospace"],
+      ['modern', 'Modern', 'Inter + JetBrains Mono figures', "'Inter', sans-serif", "'JetBrains Mono', monospace"],
+    ];
+    // make sure every sample font is loaded for the preview
+    if (!document.getElementById('ui-font-preview')) { const l = document.createElement('link'); l.rel = 'stylesheet'; l.id = 'ui-font-preview'; l.href = 'https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;600&family=Inter:wght@400;600;700&display=swap'; document.head.appendChild(l); }
+    const draw = () => {
+      box.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
+        <div class="ui-fonts">${FONTS.map(([k, name, desc, text, num]) => `<button type="button" class="ui-font ${sel.font === k ? 'on' : ''}" data-font="${k}" aria-pressed="${sel.font === k}"><span class="ui-radio"></span><span class="ui-meta"><b>${name}</b><span class="xs muted">${desc}</span></span><span class="ui-prev"><span class="ui-sample" style="font-family:${text}">Market Overview</span><span class="ui-num" style="font-family:${num}">7,716.96 <i class="up">+0.06%</i></span></span></button>`).join('')}</div>
+        <div class="field"><label>Text size</label><span id="ui-size"></span></div>
+        <div class="row-actions"><button class="btn" id="ui-save">Apply to everyone</button><button class="btn ghost" id="ui-revert">Revert preview</button><span class="xs muted" style="align-self:center">Choosing a font or size previews it here first.</span></div></div>`;
+      mount('#ui-size', seg([['small', 'Small'], ['default', 'Default'], ['large', 'Large'], ['x-large', 'X-Large']], sel.size, v => { sel.size = v; applyUI({ font: sel.font, scale: SCALE[v] }, false); }, ''));
+      box.querySelectorAll('[data-font]').forEach(b => b.onclick = () => { sel.font = b.dataset.font; applyUI({ font: sel.font, scale: SCALE[sel.size] }, false); draw(); });
+      $('#ui-save').onclick = async () => { try { await api('/admin/keys', { method: 'POST', headers: hdr(), body: JSON.stringify({ UI_FONT: sel.font, UI_FONT_SIZE: sel.size }) }); toast(`Appearance saved: ${sel.font}, ${sel.size}`); applyUI({ font: sel.font, scale: SCALE[sel.size] }, true); } catch (e) { toast(e.message); } };
+      $('#ui-revert').onclick = () => { sel.font = cur.font; sel.size = cur.size; applyUI({ font: cur.font, scale: cur.scale }, false); draw(); };
+    };
+    draw();
+  }
   async function renderAdminNews(hdr) {
     const box = $('#adm-news');
     try {
@@ -1160,6 +1186,19 @@
     };
   }
 
+  /* ═════════════════════ APPEARANCE (admin-set font and text size) ═════════════════════ */
+  const FONT_CSS = { classic: 'IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700', modern: 'Inter:wght@400;500;600;700;800' };
+  function applyUI(ui, rerender = true) {
+    if (!ui) return; const h = document.documentElement;
+    const changed = h.dataset.font !== ui.font || (Number(h.style.getPropertyValue('--fs')) || 1) !== ui.scale;
+    h.dataset.font = ui.font; h.style.setProperty('--fs', String(ui.scale));
+    const css = FONT_CSS[ui.font]; let link = document.getElementById('ui-font');
+    if (css) { const href = `https://fonts.googleapis.com/css2?family=${css}&display=swap`; if (!link) { link = document.createElement('link'); link.rel = 'stylesheet'; link.id = 'ui-font'; document.head.appendChild(link); } if (link.getAttribute('href') !== href) link.href = href; }
+    try { localStorage.setItem('cft:ui', JSON.stringify({ font: ui.font, scale: ui.scale })); } catch (e) {}
+    if (changed && rerender && state.universe) { const go = () => show(state.view); if (document.fonts && document.fonts.ready) document.fonts.ready.then(go); else go(); }
+  }
+  async function loadUI(rerender = true) { try { const r = await api('/ui'); applyUI({ font: r.font, scale: r.scale }, rerender); } catch (e) {} }
+
   /* ═════════════════════ navigation & boot ═════════════════════ */
   const renderers = { glossary: renderGlossary, overview: renderOverview, monitor: renderMonitor, flows: renderFlows, analytics: renderAnalytics, risk: renderRisk, intel: renderIntel, shock: renderShock, admin: renderAdmin };
   async function show(view) {
@@ -1187,6 +1226,7 @@
   // theme attribute from storage may be JSON-encoded by store.set; normalise once
   try { const raw = localStorage.getItem('cft:theme'); if (raw && raw.startsWith('"')) { const t = JSON.parse(raw); localStorage.setItem('cft:theme', t); document.documentElement.dataset.theme = t; } } catch (e) {}
   buildNav(); paintIcons(); syncThemeIcon();
+  loadUI(false);
   (async () => {
     try { await loadCore(); } catch (e) { $('#ticker-inner').innerHTML = `<span class="down">Quotes unavailable: ${esc(e.message)}</span>`; $('#view-overview').innerHTML = errorBox(`The API could not be reached (${e.message}). Check that the server is running and can reach the data sources.`); return; }
     show(location.hash.slice(1) || 'overview');

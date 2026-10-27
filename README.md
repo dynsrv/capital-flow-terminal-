@@ -50,6 +50,19 @@ Two pre-crash conditions are measured from free official data and public prices 
   VIX ÷ VIX3M term structure, and distance from the 50-day average. *Primed* when model exposure is in the top quarter
   of five years; *under way* when VIX > VIX3M or exposure has been cut 30%+ in ten sessions. Labelled *model*.
 
+## Appearance
+
+Admin → **Appearance** sets the font and text size for every visitor (stored as `UI_FONT`, `UI_FONT_SIZE`; served at `/api/ui`):
+
+| Font | Text | Figures |
+|---|---|---|
+| Terminal (default) | JetBrains Mono | JetBrains Mono |
+| Classic (original) | IBM Plex Sans | IBM Plex Mono |
+| Modern | Inter | JetBrains Mono |
+
+Text size: small 92%, default 100%, large 108%, x-large 116% (all CSS font sizes are multiplied by `--fs`; chart labels follow).
+The admin card previews a choice locally before *Apply to everyone*.
+
 ## Glossary
 
 `#glossary` explains every term used in the app in plain language (86 terms in 8 sections, searchable, with an

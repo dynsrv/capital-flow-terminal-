@@ -11,6 +11,8 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app.css">
 <script>try { document.documentElement.dataset.theme = localStorage.getItem('cft:theme') || 'dark'; } catch (e) { document.documentElement.dataset.theme = 'dark'; }</script>
+<script>/* apply the last known appearance setting before first paint; app.js refreshes it from /api/ui */
+try { var u = JSON.parse(localStorage.getItem('cft:ui') || 'null'); if (u) { var h = document.documentElement; h.dataset.font = u.font; h.style.setProperty('--fs', u.scale); var f = { classic: 'IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700', modern: 'Inter:wght@400;500;600;700;800' }[u.font]; if (f) document.write('<link rel="stylesheet" id="ui-font" href="https://fonts.googleapis.com/css2?family=' + f + '&display=swap">'); } } catch (e) {}</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.1/echarts.min.js"></script>
 <script>if (typeof echarts === 'undefined') document.write('<script src="/vendor/echarts.min.js"><\/script>');</script>
 </head>
