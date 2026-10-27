@@ -542,13 +542,16 @@
     $('#kpis').onkeydown = e => { if (e.key === 'Enter') { const k = e.target.closest('.kpi'); if (k) openDrawer(k.dataset.id); } };
 
     // Concentration
-    const T = tok(); const COL = { EQ_GLOBAL: T.c1, FI_GLOBAL: T.c2, GOLD_STOCK: T.c3, CRYPTO_TOTAL: T.c4 };
-    const KID = { EQ_US: shade(T.c1, -0.3), FI_US: shade(T.c2, -0.35) };
+    const T = tok();
+    // Simple, calm palette for the asset-pool view: one flat colour per pool, a deeper shade for the US slice.
+    const COL = { EQ_GLOBAL: '#5B8DEF', FI_GLOBAL: '#3BAE96', GOLD_STOCK: '#E9A23B', CRYPTO_TOTAL: '#9A80E8' };
+    const KID = { EQ_US: shade(COL.EQ_GLOBAL, -0.22), FI_US: shade(COL.FI_GLOBAL, -0.22) };
     const total = o.sizes.reduce((s, z) => s + (z.usd || 0), 0);
     // softer fills: the palette colour blended toward the card surface as a diagonal gradient, with a hairline in the full colour
     const rgba = (hex, a) => { const n = parseInt(hex.replace('#', ''), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
-    const softCss = (hex) => { const [a, b] = softFill(hex, T); return `background:linear-gradient(135deg, ${a}, ${b});color:${inkOn(a)};box-shadow:inset 0 0 0 1px ${rgba(hex, .45)}, inset 3px 0 0 ${hex}`; };
-    const softItem = (hex) => { const [a, b] = softFill(hex, T); return { itemStyle: { color: window.echarts ? new echarts.graphic.LinearGradient(0, 0, 1, 1, [{ offset: 0, color: a }, { offset: 1, color: b }]) : a, borderColor: rgba(hex, .5), borderWidth: 1 }, label: { color: inkOn(a) } }; };
+    const ink = (hex) => (hex === COL.GOLD_STOCK ? '#2a1a04' : '#ffffff'); // white on every pool except the light amber
+    const softCss = (hex) => `background:${hex};color:${ink(hex)}`;
+    const softItem = (hex) => ({ itemStyle: { color: hex, borderWidth: 0 }, label: { color: ink(hex) } });
     $('#size-strip').innerHTML = o.sizes.map(z => `<div class="strip-seg ${total && z.usd / total < 0.12 ? 'narrow' : ''}" style="flex:${z.usd || 0};${softCss(COL[z.id])}" title="${esc(z.label)}: ${fmt.usd(z.usd)} (${total ? (z.usd / total * 100).toFixed(1) : '—'}%)"><span>${esc(z.label)}</span><b>${fmt.usd(z.usd)} · ${total ? Math.round(z.usd / total * 100) : '—'}%</b></div>`).join('');
     $('#size-legend').innerHTML = o.sizes.map(z => `<span><i class="dot" style="background:${COL[z.id]};border-radius:3px"></i>${esc(z.label)}</span>`).join('');
     const leaves = [];
