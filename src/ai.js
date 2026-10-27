@@ -4,6 +4,7 @@
 // Without an Anthropic key the endpoint returns the measured inputs with an explicit "AI not configured" flag.
 import { fetchJSON } from './lib/util.js';
 import { anomalies, regime, patterns, performance } from './analytics.js';
+import { preCrash } from './precrash.js';
 
 const SYSTEM = `You are a sell-side cross-asset strategist writing for an institutional terminal.
 Rules:
@@ -11,7 +12,7 @@ Rules:
 - Separate clearly: VERIFIED FACTS (from the input data), HISTORICAL RELATIONSHIPS (well-known, cite the episode), HYPOTHESES (your inference, hedged), SCENARIOS (conditional).
 - Do not assert causation unless the evidence supports it; say "consistent with" or "one hypothesis is".
 - If news snippets are provided, cite them by their [n] index; if none, say evidence is price/volatility-based only.
-- Draw on lessons from Black Monday 1987, the dot-com bust 2000-02 and the 2008 subprime crisis where the pattern checks show resemblance; otherwise do not force the analogy.
+- Draw on lessons from Black Monday 1987, the dot-com bust 2000-02 and the 2008 subprime crisis where the pre-crash condition checks show resemblance; otherwise do not force the analogy. Pre-crash conditions (what was in place before each peak) matter more than crash signatures (what the crash itself looked like).
 - Confidence: Low / Medium / High with one-line justification.
 Return strict JSON: {"findings":[{"signal":"","evidence":["..."],"possibleCause":"","crossAssetImpact":"","confidence":"Low|Medium|High","confidenceWhy":"","whatToWatch":["..."],"classification":{"verifiedFacts":["..."],"historicalRelationships":["..."],"hypotheses":["..."],"scenarios":["..."]},"citations":[1,2]}],"overview":"2-3 sentence summary of what is changing and why it matters"}`;
 
@@ -40,12 +41,13 @@ async function searchNews(config, query) {
 export async function intelligence(ctx, { ids, question } = {}) {
   const { config } = ctx;
   const universeIds = ids && ids.length ? ids : ['SPX', 'NDX', 'RUT', 'SX5E', 'NKY', 'SHCOMP', 'EEM', 'UST2Y', 'UST10Y', 'T10Y2Y', 'HYOAS', 'IGOAS', 'BTC', 'ETH', 'SOL', 'GOLD', 'SILVER', 'WTI', 'NATGAS', 'COPPER', 'DXY', 'USDJPY', 'VIX'];
-  const [an, reg, pat, perf] = await Promise.all([anomalies(ctx, universeIds), regime(ctx), patterns(ctx), performance(ctx, universeIds)]);
+  const [an, reg, pat, perf, pre] = await Promise.all([anomalies(ctx, universeIds), regime(ctx), patterns(ctx), performance(ctx, universeIds), preCrash(ctx).catch(() => null)]);
   const inputs = {
     asOf: new Date().toISOString(),
     regime: { label: reg.label, score: reg.score, components: reg.components.map(c => c.detail) },
     anomalies: an.items.slice(0, 12),
-    patternResemblance: pat.items.map(p => ({ episode: p.name, hits: `${p.hits}/${p.total}`, present: p.checks.filter(c => c.hit).map(c => c.label) })),
+    crashSignatures: pat.items.map(p => ({ episode: p.name, hits: `${p.hits}/${p.total}`, present: p.checks.filter(c => c.hit).map(c => c.label) })),
+    preCrashConditions: pre ? { lateCycleChecklist: { present: pre.common.present, absent: pre.common.absent }, episodes: pre.episodes.map(e => ({ episode: e.name, measuredHits: `${e.hits}/${e.measured}`, present: e.conditions.filter(c => c.hit).map(c => `${c.label} (now: ${c.now})`), notMeasured: e.conditions.filter(c => !c.measured).map(c => c.label) })) } : null,
     performance: perf.map(r => ({ id: r.id, name: r.name, price: r.price, pct1d: r.pct1d, d7: r.perf['7D'], d30: r.perf['30D'], ytd: r.perf.YTD, vol30: r.vol['30D'], dd1y: r.maxDrawdown1Y, freshness: r.freshness, asOf: r.asOf })),
   };
   const result = { inputs, anomalies: an, regime: reg, patterns: pat, ai: null, news: null };

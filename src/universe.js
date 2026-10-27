@@ -77,6 +77,7 @@ export const ASSETS = [
   { id: 'M2', name: 'US M2 money stock', cls: 'macro', region: 'US', kind: 'level', source: 'fred', symbol: 'M2SL', unit: 'USD bn', freshness: 'monthly', fredFreq: 'monthly', scale: 1e9 },
   { id: 'ECBRATE', name: 'ECB deposit facility rate', cls: 'macro', region: 'Europe', kind: 'level', source: 'fred', symbol: 'ECBDFR', unit: '%', freshness: 'eod', fredFreq: 'daily' },
   { id: 'BROADUSD', name: 'Broad trade-weighted USD', cls: 'macro', region: 'US', kind: 'index', source: 'fred', symbol: 'DTWEXBGS', unit: 'pts', freshness: 'eod', fredFreq: 'daily' },
+  { id: 'HOUSE', name: 'US house prices (Case-Shiller, YoY %)', cls: 'macro', region: 'US', kind: 'level', source: 'fred', symbol: 'CSUSHPISA', unit: '% y/y', freshness: 'monthly', fredFreq: 'monthly', transform: 'yoy' },
 ];
 
 export const ASSET_MAP = Object.fromEntries(ASSETS.map(a => [a.id, a]));
