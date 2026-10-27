@@ -395,7 +395,7 @@
 
     // Regime
     const r = o.regime; const pos = ((r.score + 1) / 2 * 100).toFixed(0);
-    $('#regime-panel').innerHTML = `<div class="regime-head"><span class="big ${r.score > .3 ? 'up' : r.score < -.3 ? 'down' : 'warn-c'}">${r.label}</span><span class="mono dim">${r.score > 0 ? '+' : ''}${r.score}</span></div><div><div class="gauge"><i style="left:${pos}%"></i></div><div class="gauge-l"><span>Risk-off −1</span><span>0</span><span>+1 Risk-on</span></div></div><div class="comp-list">${r.components.map(c => `<div class="comp"><span class="l">${esc(c.label)}</span><span class="d">${esc(c.detail)}</span><span class="s ${c.score > 0 ? 'up' : c.score < 0 ? 'down' : 'muted'}">${c.score == null ? 'n/a' : (c.score > 0 ? '+' : '') + c.score}</span></div>`).join('')}</div>`;
+    $('#regime-panel').innerHTML = `<div class="regime-head"><span class="big ${r.score > .3 ? 'up' : r.score < -.3 ? 'down' : 'warn-c'}">${r.label}</span><span class="score">${r.score > 0 ? '+' : ''}${r.score}</span></div><div><div class="gauge"><i style="left:${pos}%"></i></div><div class="gauge-l"><span>Risk-off −1</span><span>0</span><span>+1 Risk-on</span></div></div><div class="comp-list">${r.components.map(c => `<div class="comp"><span class="l">${esc(c.label)}</span><span class="d">${esc(c.detail)}</span><span class="s ${c.score > 0 ? 'up' : c.score < 0 ? 'down' : 'muted'}">${c.score == null ? 'n/a' : (c.score > 0 ? '+' : '') + c.score}</span></div>`).join('')}</div>`;
 
     // Heat grid
     let win = store.get('cft:ovwin', '30D');
