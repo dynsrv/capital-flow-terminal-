@@ -45,6 +45,20 @@ edge for that long, so all visitors share one upstream call per interval. Each u
 provider and timestamp. Index levels only come from a provider that publishes the index (no ETF proxies). Non-US indices,
 yields, spreads, oil, copper, grains and macro series keep their standard (delayed / end-of-day) sources.
 
+**WebSocket streams (Admin → credentials → Real-time):** each provider that offers a stream has its own switch.
+Vercel Edge cannot hold sockets open, so streams run in the browser, which means the key travels with the stream:
+
+| Switch | Modes | Stream | Notes |
+|---|---|---|---|
+| Massive WebSocket | off · admin | `wss://socket.massive.com/stocks` trades | One connection per key, so admin only. Without real-time on the plan it falls back to per-second bars from `delayed.massive.com` (15-min delayed, labelled) |
+| Alpaca WebSocket | off · admin | `stream.data.alpaca.markets/v2/iex` trades | One connection per key on Basic, so admin only |
+| Finnhub WebSocket | off · admin · everyone | `ws.finnhub.io` trades | `everyone` puts the key in every visitor's browser |
+| Twelve Data WebSocket | off · admin · everyone | `ws.twelvedata.com` price events | Symbols outside the plan are listed in Admin |
+
+`admin` streams only in a browser unlocked with the admin token (`/api/admin/rt-sockets`); `everyone` is published in
+`/api/rt/config`. Admin → Real-time shows each stream's status, symbol count, ticks and last tick. Polling keeps running
+underneath, so a stream that drops never leaves a price stale.
+
 ## Valuation and systematic-selling measures
 
 Two pre-crash conditions are measured from free official data and public prices (`src/valuation.js`):
