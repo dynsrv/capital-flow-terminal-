@@ -1116,10 +1116,10 @@
   function openProviderSocket(d, gen, retry = 0) {
     if (gen !== rt.gen || typeof WebSocket === 'undefined') return;
     const bySym = {}; for (const [id, sym] of Object.entries(d.symbols)) bySym[sym] = id;
-    const syms = Object.values(d.symbols); const st = rt.sock[d.provider] = { status: 'connecting', ticks: 0, mode: d.mode, n: syms.length, at: null, note: '' };
+    const syms = Object.values(d.symbols); const st = rt.sock[d.provider] = { status: 'connecting', ticks: 0, mode: d.mode, n: syms.length, at: null, note: d.delayed ? 'real-time feed not on plan: using the 15-minute delayed feed' : '' };
     let ws; try { ws = new WebSocket(d.url); } catch (e) { st.status = 'error'; st.note = e.message; return; }
     rt.sockets[d.provider] = ws;
-    const tick = (sym, price, ts) => { const id = bySym[sym]; const v = Number(price); if (!id || !isFinite(v) || v <= 0) return; st.ticks++; st.at = Date.now(); st.status = 'live'; applyRt(id, v, { ts: ts ? new Date(ts).toISOString() : new Date().toISOString(), source: d.provider + ' ws' }); };
+    const tick = (sym, price, ts) => { const id = bySym[sym]; const v = Number(price); if (!id || !isFinite(v) || v <= 0) return; st.ticks++; st.at = Date.now(); st.status = 'live'; applyRt(id, v, { ts: ts ? new Date(ts).toISOString() : new Date().toISOString(), source: d.provider + (d.delayed ? ' ws · 15-min delayed' : ' ws') }); };
     const send = (o) => { try { ws.send(JSON.stringify(o)); } catch (e) {} };
     ws.onopen = () => {
       st.status = 'open';
@@ -1130,10 +1130,12 @@
     ws.onmessage = (ev) => {
       let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
       if (d.provider === 'finnhub') { if (m.type === 'trade') for (const t of m.data || []) tick(t.s, t.p, t.t); else if (m.type === 'error') { st.status = 'error'; st.note = m.msg || 'error'; } }
-      else if (d.provider === 'twelvedata') { if (m.event === 'price') tick(m.symbol, m.price, m.timestamp ? m.timestamp * 1000 : null); else if (m.status === 'error' || m.event === 'subscribe-status' && m.status !== 'ok') { st.note = (m.messages || m.fails || m.message || '') + ''; } }
+      else if (d.provider === 'twelvedata') { if (m.event === 'price') tick(m.symbol, m.price, m.timestamp ? m.timestamp * 1000 : null); else if (m.status === 'error' || m.event === 'subscribe-status' && m.status !== 'ok') { const f = (m.fails || []).map(x => x && x.symbol || x).filter(Boolean); st.note = f.length ? `not on plan: ${f.join(', ')}` : String(m.message || (m.messages || []).join(' ') || ''); } }
       else for (const x of [].concat(m)) {
         if (d.provider === 'massive') {
-          if (x.ev === 'status') { if (x.status === 'auth_success') { st.status = 'subscribed'; send({ action: 'subscribe', params: syms.map(y => 'T.' + y).join(',') }); } else if (/fail|max|error|not/i.test(x.status || '')) { st.status = 'error'; st.note = x.message || x.status; } }
+          if (x.ev === 'status') { if (x.status === 'auth_success') { st.status = 'subscribed'; send({ action: 'subscribe', params: syms.map(y => 'T.' + y).join(',') }); } else if (/fail|max|error|not/i.test(x.status || '')) {
+              if (!d.delayed && /not authorized/i.test(x.message || '') && /\/\/socket\./.test(d.url)) { delete rt.sockets[d.provider]; try { ws.close(); } catch (e) {} openProviderSocket({ ...d, url: d.url.replace('//socket.', '//delayed.'), delayed: true }, gen); return; }
+              st.status = 'error'; st.note = x.message || x.status; } }
           else if (x.ev === 'T') tick(x.sym, x.p, x.t);
         } else if (d.provider === 'alpaca') {
           if (x.T === 'success' && x.msg === 'connected') send(d.auth);
@@ -1207,7 +1209,7 @@
     };
     const RT_OPTS = (c, p) => c.options.includes(p);
     draw();
-    const wsBox = () => { const el = $('#rt-ws-status'); if (!el) return false; const e = Object.entries(rt.sock); el.innerHTML = e.length ? `<div class="field"><label>WebSocket streams in this browser</label></div><div class="rt-ws">${e.map(([p, x]) => `<span class="rt-w ${x.status}"><i></i><b>${esc(pname(p))}</b> ${esc(x.status)} · ${x.n} symbols · ${x.ticks} ticks${x.at ? ` · last ${fmt.ago(new Date(x.at).toISOString())}` : ''}${x.note ? ` · <span class="down">${esc(x.note.slice(0, 80))}</span>` : ''} <span class="xs muted">(${x.mode === 'everyone' ? 'all visitors' : 'admin only'})</span></span>`).join('')}</div>` : `<p class="xs muted">WebSocket streams: none running. Turn one on in the Real-time group of the credentials panel (Massive, Alpaca, Finnhub or Twelve Data WebSocket), then save.</p>`; return true; };
+    const wsBox = () => { const el = $('#rt-ws-status'); if (!el) return false; const e = Object.entries(rt.sock); el.innerHTML = e.length ? `<div class="field"><label>WebSocket streams in this browser</label></div><div class="rt-ws">${e.map(([p, x]) => `<span class="rt-w ${x.status}"><i></i><b>${esc(pname(p))}</b> ${esc(x.status)} · ${x.n} symbols · ${x.ticks} ticks${x.at ? ` · last ${fmt.ago(new Date(x.at).toISOString())}` : ''}${x.note ? ` · <span class="down">${esc(x.note.slice(0, 160))}</span>` : ''} <span class="xs muted">(${x.mode === 'everyone' ? 'all visitors' : 'admin only'})</span></span>`).join('')}</div>` : `<p class="xs muted">WebSocket streams: none running. Turn one on in the Real-time group of the credentials panel (Massive, Alpaca, Finnhub or Twelve Data WebSocket), then save.</p>`; return true; };
     wsBox(); clearInterval(renderAdminRealtime._t); renderAdminRealtime._t = setInterval(() => { if (!wsBox()) clearInterval(renderAdminRealtime._t); }, 2000);
   }
 
