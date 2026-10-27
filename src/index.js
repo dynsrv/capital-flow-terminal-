@@ -7,6 +7,7 @@ import { getQuotes, getHistory, getSizes, SOURCES } from './data.js';
 import * as A from './analytics.js';
 import { flows } from './flows.js';
 import { intelligence } from './ai.js';
+import * as R from './risk.js';
 
 // CORS so the published artifact (or any front-end) can call this API.
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-headers': 'authorization,content-type' };
@@ -58,6 +59,11 @@ async function handleApi(request, env, url) {
 
     if (p === '/intel/anomalies') return wrap(await A.anomalies(ctx, parseIds(url, ASSETS.filter(a => a.cls !== 'macro' || a.id === 'VIX').map(a => a.id))));
     if (p === '/intel/patterns') return wrap(await A.patterns(ctx));
+    if (p === '/risk/table') return wrap(await R.riskTable(ctx));
+    if (p === '/risk/stress') return wrap(await R.stressIndex(ctx, Number(url.searchParams.get('years') || 2)));
+    if (p === '/risk/inflections') return wrap(await R.inflections(ctx));
+    if (p === '/risk/trend') return wrap(await R.trend(ctx, url.searchParams.get('id') || 'SPX', url.searchParams.get('window') || '1Y'));
+    if (p === '/analytics/leaders') return wrap(await R.leaders(ctx, url.searchParams.get('anchor') || 'SPX'));
     if (p === '/intel/explain') {
       let body = {}; if (request.method === 'POST') { try { body = await request.json(); } catch (e) {} }
       return wrap(await intelligence(ctx, { ids: body.ids, question: body.question }));

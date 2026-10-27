@@ -1,62 +1,79 @@
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Capital Flow Terminal</title>
-<meta name="description" content="Global Capital Flow & Market Intelligence Dashboard — where capital is concentrated, how markets are changing, and cross-asset implications.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230b0f14'/%3E%3Cpath d='M6 22l6-8 5 4 9-10' stroke='%23f5a623' stroke-width='3' fill='none'/%3E%3C/svg%3E">
+<meta name="description" content="Global capital flow and market intelligence: where capital is concentrated, how markets are changing, and the cross-asset implications.">
+<meta name="theme-color" content="#0a0d13">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23f0a73a'/%3E%3Cpath d='M7 21l6-7 4 4 8-9' stroke='%231b1104' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app.css">
+<script>try { document.documentElement.dataset.theme = localStorage.getItem('cft:theme') || 'dark'; } catch (e) { document.documentElement.dataset.theme = 'dark'; }</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.1/echarts.min.js"></script>
 <script>if (typeof echarts === 'undefined') document.write('<script src="/vendor/echarts.min.js"><\/script>');</script>
 </head>
 <body>
-<div id="snapshot-banner" class="demo-banner snapshot" hidden></div>
-<div id="demo-banner" class="demo-banner" hidden>DEMO MODE — synthetic data. Nothing on this screen is a market price. Set DEMO_MODE="false" to load live sources.</div>
-<header class="topbar">
-  <div class="brand"><span class="logo"></span><span class="brand-name">CAPITAL FLOW <b>TERMINAL</b></span><span class="brand-sub">Global capital & cross-asset intelligence</span></div>
-  <nav class="tabs" id="tabs">
-    <button data-view="overview" class="active">Overview</button>
-    <button data-view="monitor">Monitor</button>
-    <button data-view="flows">Flows</button>
-    <button data-view="analytics">Analytics</button>
-    <button data-view="intel">Intelligence</button>
-    <button data-view="shock">Shock Sim</button>
-    <button data-view="admin">Admin</button>
-  </nav>
-  <div class="topbar-right">
-    <div id="regime-badge" class="regime-badge neutral" title="Rules-based market regime (see Overview)">REGIME …</div>
-    <div class="clock" id="clock">--:--:-- UTC</div>
-    <button id="connect-btn" class="icon-btn" title="Connect to your deployed Worker">⛓</button>
-    <button id="refresh-btn" class="icon-btn" title="Refresh data">↻</button>
-    <button id="theme-btn" class="icon-btn" title="Toggle light/dark">◐</button>
+<div id="snapshot-banner" class="banner info" hidden></div>
+<div id="demo-banner" class="banner warn" hidden>Demo mode: synthetic data. Nothing on this screen is a market price. Set DEMO_MODE="false" to load live sources.</div>
+
+<div class="shell">
+  <aside class="sidebar" aria-label="Main navigation">
+    <div class="brand"><span class="logo" data-icon="logo"></span><div class="brand-t"><b>Capital Flow</b><span>Market intelligence terminal</span></div></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-foot" id="side-health"></div>
+  </aside>
+
+  <div class="main-col">
+    <header class="topbar">
+      <span class="logo mobile-brand" data-icon="logo"></span>
+      <div class="page-title"><h1 id="page-title">Overview</h1><p id="page-sub"></p></div>
+      <div class="top-actions">
+        <button id="regime-pill" class="pill mid" title="Rules-based market regime"><i class="dot"></i><span>Regime …</span></button>
+        <button id="stress-pill" class="pill" title="Composite market stress index (0–100)"><i class="dot"></i><span>Stress …</span></button>
+        <span class="live" title="Quotes refresh every 60 seconds"><i class="dot"></i><span id="updated">—</span></span>
+        <button id="connect-btn" class="icon-btn" title="Connect to a deployed API" aria-label="Connect to a deployed API" data-icon="link"></button>
+        <button id="refresh-btn" class="icon-btn" title="Refresh data" aria-label="Refresh data" data-icon="refresh"></button>
+        <button id="theme-btn" class="icon-btn" title="Switch light / dark" aria-label="Switch light or dark theme" data-icon="moon"></button>
+      </div>
+    </header>
+    <div id="connect-box" class="connect-box" hidden>
+      <label for="connect-url" class="dim sm">API URL</label>
+      <input type="text" id="connect-url" placeholder="https://capital-flow-terminal-dyn-srv.vercel.app">
+      <button class="btn" id="connect-save">Connect</button>
+      <span class="xs muted">Leave empty to use this page's own API, or the embedded snapshot.</span>
+    </div>
+    <div class="ticker" id="ticker"><div class="ticker-inner" id="ticker-inner"><span class="muted">Loading quotes…</span></div></div>
+
+    <main id="main">
+      <section id="view-overview" class="view active"></section>
+      <section id="view-monitor" class="view"></section>
+      <section id="view-flows" class="view"></section>
+      <section id="view-analytics" class="view"></section>
+      <section id="view-risk" class="view"></section>
+      <section id="view-intel" class="view"></section>
+      <section id="view-shock" class="view"></section>
+      <section id="view-admin" class="view"></section>
+    </main>
+
+    <footer class="footer">
+      <div class="legend"><span><i class="dot rt"></i>Real-time</span><span><i class="dot dl"></i>Delayed</span><span><i class="dot eod"></i>End of day</span><span><i class="dot slow"></i>Weekly / monthly</span><span><i class="dot st"></i>Stale / unavailable</span></div>
+      <span id="foot-sources">Sources: Yahoo Finance, FRED, CoinGecko, gold-api.com</span>
+      <span class="disc">Information only. Not investment advice.</span>
+    </footer>
   </div>
-</header>
-<div id="connect-box" class="connect-box" hidden><label for="connect-url">Worker URL</label><input type="text" id="connect-url" placeholder="https://capital-flow-terminal.<you>.workers.dev"><button class="btn" id="connect-save">Connect</button><span class="xs muted">Leave empty to use this page's own API (local/Worker) or the embedded snapshot.</span></div>
-<div class="ticker" id="ticker"><div class="ticker-inner" id="ticker-inner">Loading live quotes…</div></div>
+</div>
 
-<main id="main">
-  <section id="view-overview" class="view active"></section>
-  <section id="view-monitor" class="view"></section>
-  <section id="view-flows" class="view"></section>
-  <section id="view-analytics" class="view"></section>
-  <section id="view-intel" class="view"></section>
-  <section id="view-shock" class="view"></section>
-  <section id="view-admin" class="view"></section>
-</main>
-
-<aside id="drawer" class="drawer" hidden>
-  <div class="drawer-head"><div id="drawer-title">—</div><button class="icon-btn" id="drawer-close">✕</button></div>
-  <div id="drawer-body"></div>
+<nav class="tabbar" id="tabbar" aria-label="Main navigation"></nav>
+<div id="scrim" class="scrim" hidden></div>
+<div id="sheet" class="sheet" hidden><div class="grab"></div><nav class="nav" id="sheet-nav"></nav></div>
+<div id="popover" class="popover" hidden></div>
+<aside id="drawer" class="drawer" hidden aria-modal="true" role="dialog">
+  <div class="drawer-h"><div class="t"><h3 id="drawer-title">—</h3><p id="drawer-sub"></p></div><button class="icon-btn" id="drawer-close" aria-label="Close" data-icon="x"></button></div>
+  <div class="drawer-b" id="drawer-body"></div>
 </aside>
-
-<footer class="statusbar" id="statusbar">
-  <span class="legend"><i class="dot rt"></i>real-time <i class="dot delayed"></i>delayed <i class="dot eod"></i>end-of-day <i class="dot slow"></i>weekly/monthly <i class="dot stale"></i>stale/unavailable</span>
-  <span id="status-sources">sources: …</span>
-  <span id="status-updated">updated —</span>
-</footer>
+<div id="toast" class="toast" hidden></div>
 <script src="/app.js"></script>
 </body>
 </html>
