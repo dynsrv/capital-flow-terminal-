@@ -34,6 +34,12 @@ Admin → credentials → **Real-time** group. Switch *Real-time updates* to `on
 | Twelve Data | EUR, JPY, GBP, CNY, IDR, gold, silver, crypto, ETFs | Free 8 credits/min (non-display); Grow from $29/mo | Server-proxied, interval stretched to the credit budget |
 | Massive (Polygon.io) | S&P 500, Nasdaq 100, Russell 2000, VIX, ETFs, FX, metals, crypto | ~$79/mo per asset class for real-time (Developer); lower tiers are 15-min delayed and labelled so | Server-proxied, one call |
 
+**Routing (Admin → Real-time data routing):** set the provider priority, pick a source per instrument (Auto, a
+specific provider, or Off), and press **Scan my plans** to test every instrument against every saved key (✓ priced,
+D delayed, ✕ not in plan). Anything a provider cannot price falls through to the next provider automatically and the
+gap is remembered for six hours; the daily job re-scans. Extra mappings: Finnhub for EUR/JPY/GBP, gold, silver and US
+indices (paid Finnhub plans), Alpaca for BTC/ETH/SOL.
+
 Keys never reach the browser: `/api/rt/quotes` polls the configured providers at the interval and caches the result at the
 edge for that long, so all visitors share one upstream call per interval. Each updated price is relabelled `live` with its
 provider and timestamp. Index levels only come from a provider that publishes the index (no ETF proxies). Non-US indices,

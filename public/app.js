@@ -937,12 +937,12 @@
       <div style="display:flex;flex-direction:column;gap:var(--gap);min-width:0">
         ${card({ icon: 'intel', title: 'AI reading', sub: 'Generate or schedule the market reading shown on the Intelligence page', body: '<div id="adm-ai"><p class="dim">Unlock to manage.</p></div>' })}
         ${card({ icon: 'book', title: 'Appearance', sub: 'Font and text size for everyone who opens the terminal', body: '<div id="adm-ui"><p class="dim">Unlock to change.</p></div>' })}
-        ${card({ icon: 'pulse', title: 'Real-time data', sub: 'Optional live prices: switch on and add keys in the Real-time group of the credentials panel', body: '<div id="adm-rt"><p class="dim">Unlock to view.</p></div>' })}
         ${card({ icon: 'news', title: 'News curation', sub: 'Optional: let a model rank and annotate the sidebar headlines', body: '<div id="adm-news"><p class="dim">Unlock to manage.</p></div>' })}
         ${card({ icon: 'tv', title: 'Live TV channels', sub: 'YouTube channels offered in the sidebar player', body: '<div id="adm-tv"><p class="dim">Unlock to edit.</p></div>' })}
         ${card({ icon: 'db', title: 'Storage & cache', body: '<div id="adm-status"><p class="dim">Unlock to view.</p></div>' })}
         ${card({ icon: 'info', title: 'How data is handled', body: '<div class="sm dim" style="display:flex;flex-direction:column;gap:8px"><p><b>No key needed:</b> Yahoo Finance (delayed), FRED, CoinGecko public, gold-api.com.</p><p><b>Optional:</b> FRED, EIA, CoinGecko (longer history), Anthropic (AI explanations), Exa or Parallel (news citations).</p><p><b>Cache:</b> quotes 60 s, histories 15 min, macro 1 h. If a source fails, the last value is served and flagged stale.</p><p><b>Demo mode</b> shows a permanent banner and every badge reads demo.</p></div>' })}
       </div></div>
+      ${card({ icon: 'pulse', title: 'Real-time data routing', sub: 'Which provider prices each instrument. Switch real-time on and add keys in the Real-time group of the credentials panel', body: '<div id="adm-rt"><p class="dim">Unlock to view.</p></div>' })}
       ${card({ icon: 'layers', title: 'Market-size reference data', sub: 'Published aggregates behind the Overview treemap', body: '<div id="adm-sizes"><p class="dim">Unlock to edit.</p></div>', foot: 'Update when a newer SIFMA Fact Book or World Gold Council figure is published, and keep the source and as-of date.' })}`;
     const unlock = async () => {
       a.token = $('#adm-token').value; try { sessionStorage.setItem('cft:admin', a.token); } catch (e) {}
@@ -1120,23 +1120,44 @@
 
   async function renderAdminRealtime(hdr) {
     const box = $('#adm-rt'); if (!box) return;
-    try {
-      const r = await api('/admin/realtime', { headers: hdr() }); const st = r.settings;
-      const SHORT = { massive: 'Massive', alpaca: 'Alpaca', finnhub: 'Finnhub', twelvedata: 'Twelve Data', coinbase: 'Coinbase' }; const pname = (p) => SHORT[p] || p || '';
-      const probe = r.probe ? Object.entries(r.probe.providers || {}) : [];
-      const live = new Map(((r.probe && r.probe.quotes) || []).map(q => [q.id, q]));
-      box.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
-        <div class="kv"><dt>Status</dt><dd class="${st.enabled ? 'up' : 'muted'}">${st.enabled ? 'on' : 'off'}</dd><dt>Interval</dt><dd>${st.intervalSec} s</dd><dt>Crypto stream</dt><dd>${esc(st.crypto)}</dd>${probe.map(([p, x]) => `<dt>${esc(x.name)}</dt><dd class="${x.ok ? 'up' : 'down'}">${x.ok ? `ok · every ${x.ttl} s` : esc(String(x.error || 'error').slice(0, 80))}</dd>`).join('')}</div>
-        <div class="tbl"><table class="t"><thead><tr><th>Instrument</th><th>Real-time source</th><th class="num">Now</th></tr></thead><tbody>${r.coverage.map(c => { const q = live.get(c.id); return `<tr><td class="mono">${c.id}</td><td class="${c.provider ? '' : 'muted'}" style="white-space:normal">${c.provider ? esc(pname(c.provider)) + (c.provider === 'coinbase' ? ' <span class="xs muted">(stream)</span>' : '') : `<span class="xs">needs ${esc(c.options.filter(o => o !== 'coinbase').map(pname).join(' / '))}</span>`}</td><td class="num">${q ? fmt.px(q.price) + (q.delayed ? ' <span class="badge delayed">delayed</span>' : '') : c.provider === 'coinbase' && st.enabled ? '<span class="xs muted">browser</span>' : '—'}</td></tr>`; }).join('')}</tbody></table></div>
-        <p class="xs muted">Everything else (non-US indices, yields, spreads, oil, copper, grains, macro) keeps its standard source: affordable real-time feeds for those are not available, and they are labelled delayed or end-of-day as before.</p>
+    const SHORT = { massive: 'Massive', alpaca: 'Alpaca', finnhub: 'Finnhub', twelvedata: 'Twelve Data', coinbase: 'Coinbase' };
+    const pname = (p) => SHORT[p] || p || '';
+    let r; try { r = await api('/admin/realtime', { headers: hdr() }); } catch (e) { box.innerHTML = errorBox(e.message); return; }
+    const st = r.settings; const routing = r.routing;
+    const prio = routing.priority.slice(); const ov = { ...routing.overrides };
+    const scan = routing.scan; const live = new Map(((r.probe && r.probe.quotes) || []).map(q => [q.id, q]));
+    const PROVS = ['massive', 'alpaca', 'finnhub', 'twelvedata'];
+    const cell = (id, p) => {
+      const res = scan && scan.results[id] && scan.results[id][p];
+      if (!st.configured[p]) return '<span class="rt-c na" title="No key saved">·</span>';
+      if (!res) return '<span class="rt-c" title="Not scanned yet">?</span>';
+      if (res.ok === true) return `<span class="rt-c ok ${res.delayed ? 'dl' : ''}" title="${res.delayed ? 'Delayed in your plan' : 'Priced'}: ${esc(String(res.price))}">${res.delayed ? 'D' : '✓'}</span>`;
+      if (res.ok === null) return `<span class="rt-c err" title="${esc(res.error || 'error')}">!</span>`;
+      return `<span class="rt-c no" title="${esc(res.error || 'not in plan')}">✕</span>`;
+    };
+    const draw = () => {
+      box.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">
+        <div class="kv"><dt>Status</dt><dd class="${st.enabled ? 'up' : 'muted'}">${st.enabled ? 'on' : 'off'} · every ${st.intervalSec} s</dd><dt>Crypto stream</dt><dd>${esc(st.crypto)}</dd>${r.probe ? Object.entries(r.probe.providers || {}).map(([p, x]) => `<dt>${esc(pname(p))}</dt><dd class="${x.ok ? 'up' : 'down'}">${x.ok ? `${x.priced} priced` : esc(String(x.error || 'error').slice(0, 60))}</dd>`).join('') : ''}${r.probe && r.probe.unpriced && r.probe.unpriced.length ? `<dt>Not live</dt><dd class="muted">${r.probe.unpriced.join(', ')}</dd>` : ''}</div>
+        <div><div class="field"><label>Provider priority</label></div><div class="rt-prio">${prio.map((p, i) => `<span class="rt-p ${st.configured[p] ? '' : 'off'}"><b>${i + 1}</b>${esc(pname(p))}${st.configured[p] ? '' : ' <i>no key</i>'}<button type="button" class="icon-btn sm" data-up="${i}" ${i === 0 ? 'disabled' : ''} aria-label="Move up">↑</button><button type="button" class="icon-btn sm" data-dn="${i}" ${i === prio.length - 1 ? 'disabled' : ''} aria-label="Move down">↓</button></span>`).join('')}</div>
+        <p class="xs muted" style="margin-top:6px">Each instrument uses the first provider in this order that your plan covers; anything a provider can't price falls through to the next one automatically.</p></div>
+        <div class="row-actions"><button class="btn ghost" id="rt-scan">${ic('pulse')}Scan my plans</button><span class="xs muted" style="align-self:center">${scan ? `Last scan ${fmt.ago(scan.at)}: ${Object.values(scan.summary).map(x => `${esc(x.name.split(' (')[0])} ${x.priced}/${x.of}`).join(' · ')}` : 'Not scanned yet. Tests every instrument against every saved key.'}</span></div>
+        <div class="tbl rt-tbl"><table class="t"><thead><tr><th>Instrument</th><th>Live now</th>${PROVS.map(p => `<th class="rt-h">${esc(pname(p))}</th>`).join('')}<th>Source</th></tr></thead><tbody>${r.coverage.map(c => { const q = live.get(c.id); const opts = ['auto', ...c.options.filter(o => o === 'coinbase' || st.configured[o]), 'off']; return `<tr><td class="mono"><b>${c.id}</b></td><td>${c.provider ? `<span class="${q || c.provider === 'coinbase' ? 'up' : 'muted'}">${esc(pname(c.provider))}</span>${q ? ` <span class="xs muted">${fmt.px(q.price)}</span>` : ''}` : '<span class="muted">—</span>'}</td>${PROVS.map(p => `<td class="rt-h">${RT_OPTS(c, p) ? cell(c.id, p) : '<span class="rt-c na">·</span>'}</td>`).join('')}<td><select data-ov="${c.id}" aria-label="Source for ${c.id}">${opts.map(o => `<option value="${o}" ${(ov[c.id] || 'auto') === o ? 'selected' : ''}>${o === 'auto' ? 'Auto' : o === 'off' ? 'Off' : esc(pname(o))}</option>`).join('')}</select></td></tr>`; }).join('')}</tbody></table></div>
+        <p class="xs muted">✓ priced in your plan · D delayed in your plan · ✕ not in your plan · · not offered or no key. Index levels come only from providers that publish the index itself; ETFs are never shown in place of an index.</p>
+        <div class="row-actions"><button class="btn" id="rt-save">Save routing</button></div>
         <details><summary class="sm dim" style="cursor:pointer">Provider guide and prices</summary><div class="tbl" style="margin-top:8px"><table class="t"><thead><tr><th>Provider</th><th>Covers here</th><th>Cost</th></tr></thead><tbody>
           <tr><td>Coinbase public WebSocket</td><td>BTC, ETH, SOL (tick-by-tick)</td><td>Free, no key</td></tr>
-          <tr><td>Alpaca Basic</td><td>US ETFs (IEX venue only)</td><td>Free · Algo Trader Plus $99/mo for all US exchanges</td></tr>
-          <tr><td>Finnhub Free</td><td>US ETFs</td><td>Free, ~60 calls/min, personal use</td></tr>
-          <tr><td>Twelve Data</td><td>FX, gold, silver, crypto, ETFs</td><td>Free 8 credits/min (non-display) · Grow from $29/mo</td></tr>
-          <tr><td>Massive (Polygon.io)</td><td>S&amp;P 500, Nasdaq 100, Russell 2000, VIX, ETFs, FX, metals, crypto</td><td>~$79/mo per asset class for real-time (Developer); lower tiers 15-min delayed</td></tr>
-        </tbody></table></div><p class="xs muted" style="margin-top:6px">Prices as published by each provider in 2026; check their sites before subscribing. Displaying data publicly may need a display licence on paid plans.</p></details></div>`;
-    } catch (e) { box.innerHTML = errorBox(e.message); }
+          <tr><td>Alpaca Basic</td><td>US ETFs (IEX venue), crypto</td><td>Free · Algo Trader Plus $99/mo for all US exchanges</td></tr>
+          <tr><td>Finnhub</td><td>US ETFs free; FX, gold, silver, indices on paid plans</td><td>Free tier ~60 calls/min</td></tr>
+          <tr><td>Twelve Data</td><td>FX incl. IDR and CNY, gold, silver, crypto, ETFs</td><td>Free 8 credits/min (non-display) · Grow from $29/mo</td></tr>
+          <tr><td>Massive (Polygon.io)</td><td>S&amp;P 500, Nasdaq 100, Russell 2000, VIX, ETFs, FX, metals, crypto</td><td>Billed per asset class: Stocks, Indices, Currencies; real-time from the Developer tier</td></tr>
+        </tbody></table></div></details></div>`;
+      box.querySelectorAll('[data-up],[data-dn]').forEach(b => b.onclick = () => { const i = Number(b.dataset.up ?? b.dataset.dn); const j = b.dataset.up != null ? i - 1 : i + 1; [prio[i], prio[j]] = [prio[j], prio[i]]; draw(); });
+      box.querySelectorAll('[data-ov]').forEach(sl => sl.onchange = () => { ov[sl.dataset.ov] = sl.value; });
+      $('#rt-scan').onclick = async (e) => { const b = e.currentTarget; b.disabled = true; b.innerHTML = `<span class="spin" style="width:12px;height:12px"></span>Scanning…`; try { await api('/admin/realtime/scan', { method: 'POST', headers: hdr() }); toast('Plans scanned'); renderAdminRealtime(hdr); startRt(); } catch (err) { toast(err.message); b.disabled = false; } };
+      $('#rt-save').onclick = async () => { try { await api('/admin/realtime', { method: 'POST', headers: hdr(), body: JSON.stringify({ priority: prio, overrides: ov }) }); toast('Routing saved'); renderAdminRealtime(hdr); startRt(); } catch (err) { toast(err.message); } };
+    };
+    const RT_OPTS = (c, p) => c.options.includes(p);
+    draw();
   }
 
   /* ═════════════════════ GLOSSARY ═════════════════════ */

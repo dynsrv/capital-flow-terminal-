@@ -15,7 +15,7 @@ import { preCrash } from './precrash.js';
 import { getReading, refreshReading, scheduledRefresh, listModels, listReadings } from './reading.js';
 import { fetchNews, curateNews, getCurated, SOURCES as NEWS_SOURCES } from './news.js';
 import { getChannels, saveChannels, resetChannels, hlsRelay, DEFAULT_CHANNELS } from './tv.js';
-import { publicConfig, rtQuotes, coverage, rtSettings, PROVIDERS, RT_MAP } from './realtime.js';
+import { publicConfig, rtQuotes, rtSettings, PROVIDERS, RT_MAP, loadRouting, saveRouting, routeFor, scanPlans } from './realtime.js';
 
 // CORS so the published artifact (or any front-end) can call this API.
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-headers': 'authorization,content-type' };
@@ -94,7 +94,7 @@ async function handleApi(request, env, url) {
     if (p === '/tv/channels' || p === '/tv/streams') return wrap(await getChannels(ctx));
     if (p === '/hls') return hlsRelay(ctx, request, url);
     if (p === '/ui') { const font = ['terminal', 'classic', 'modern'].includes(config.keys.UI_FONT) ? config.keys.UI_FONT : 'terminal'; const size = ['small', 'default', 'large', 'x-large'].includes(config.keys.UI_FONT_SIZE) ? config.keys.UI_FONT_SIZE : 'default'; return wrap({ font, size, scale: { small: 0.92, default: 1, large: 1.08, 'x-large': 1.16 }[size] }); }
-    if (p === '/rt/config') return wrap(publicConfig(config));
+    if (p === '/rt/config') return wrap(await publicConfig(ctx));
     if (p === '/rt/quotes') { const r = await rtQuotes(ctx); return json({ ok: true, generatedAt: new Date().toISOString(), ms: Date.now() - started, ...r }, 200, r.enabled ? { 'cache-control': `public, s-maxage=${Math.max(2, r.intervalSec - 1)}, stale-while-revalidate=${r.intervalSec}` } : { 'cache-control': 'public, s-maxage=30' }); }
     if (p === '/intel/explain') {
       // Model calls cost money: admin only. Visitors read the stored reading from /intel/reading.
@@ -106,7 +106,7 @@ async function handleApi(request, env, url) {
       const secret = env.CRON_SECRET; const auth = request.headers.get('authorization') || '';
       const okCron = secret && auth === `Bearer ${secret}`; const okAdmin = checkAdminAuth(request, env).ok;
       if (!okCron && !okAdmin) return error('Unauthorised', 401);
-      const out = { histories: await persistHistories(ctx).catch(e => ({ error: e.message })), snapshot: await dailySnapshot(ctx).catch(e => ({ error: e.message })), ai: await scheduledRefresh(ctx).catch(e => ({ error: e.message })), news: (config.keys.NEWS_AI_CURATION || 'off') === 'daily' ? await curateNews(ctx).then(c => ({ curated: c.picks.length })).catch(e => ({ error: e.message })) : { skipped: 'news curation not scheduled' } };
+      const out = { histories: await persistHistories(ctx).catch(e => ({ error: e.message })), snapshot: await dailySnapshot(ctx).catch(e => ({ error: e.message })), ai: await scheduledRefresh(ctx).catch(e => ({ error: e.message })), realtimeScan: rtSettings(config).enabled ? await scanPlans(ctx).then(x => x.summary).catch(e => ({ error: e.message })) : { skipped: 'real-time off' }, news: (config.keys.NEWS_AI_CURATION || 'off') === 'daily' ? await curateNews(ctx).then(c => ({ curated: c.picks.length })).catch(e => ({ error: e.message })) : { skipped: 'news curation not scheduled' } };
       return wrap(out);
     }
 
@@ -134,7 +134,9 @@ async function handleApi(request, env, url) {
       if (p === '/admin/news-sources') return wrap({ sources: NEWS_SOURCES.map(({ id, name, region, cat, url }) => ({ id, name, region, cat, url })) });
       if (p === '/admin/tv' && request.method === 'GET') return wrap({ ...(await getChannels(ctx)), defaults: DEFAULT_CHANNELS });
       if (p === '/admin/tv' && request.method === 'POST') { const body = await request.json().catch(() => ({})); return wrap(body.reset ? await resetChannels(ctx) : await saveChannels(ctx, body.channels)); }
-      if (p === '/admin/realtime') { const st = rtSettings(config); const cov = coverage(st); return wrap({ settings: { enabled: st.enabled, intervalSec: st.intervalSec, crypto: st.crypto, configured: st.configured, tdCredits: st.tdCredits }, coverage: Object.keys(RT_MAP).map(id => ({ id, ...(cov[id] || { provider: null }), options: Object.keys(RT_MAP[id]) })), providers: PROVIDERS, probe: st.enabled ? await rtQuotes(ctx) : null }); }
+      if (p === '/admin/realtime' && request.method === 'POST') { const body = await request.json().catch(() => ({})); const patch = {}; if (Array.isArray(body.priority)) patch.priority = body.priority; if (body.overrides) patch.overrides = body.overrides; return wrap({ routing: await saveRouting(ctx, patch) }); }
+      if (p === '/admin/realtime/scan' && request.method === 'POST') return wrap({ scan: await scanPlans(ctx) });
+      if (p === '/admin/realtime') { const st = rtSettings(config); const routing = await loadRouting(ctx); const cov = routeFor(st, routing, new Set(), routing.scan); return wrap({ settings: { enabled: st.enabled, intervalSec: st.intervalSec, crypto: st.crypto, configured: st.configured, tdCredits: st.tdCredits }, routing, coverage: Object.keys(RT_MAP).map(id => ({ id, ...(cov[id] || { provider: null }), options: Object.keys(RT_MAP[id]), override: routing.overrides[id] || 'auto' })), providers: PROVIDERS, probe: st.enabled ? await rtQuotes(ctx) : null }); }
       if (p === '/admin/readings') return wrap({ readings: await listReadings(env) });
       if (p === '/admin/store') {
         const st = env.__store; if (!st) return wrap({ backend: 'none', persistent: false });
