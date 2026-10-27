@@ -47,6 +47,9 @@
     coins: '<circle cx="8" cy="8" r="6"/><path d="M18.1 10.4A6 6 0 1 1 10.3 18"/><path d="M7 6h1v4"/>',
     flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1-2.1-.2-4.1 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.2.4-2.3 1-3.4.3 1.7 1.3 2.9 2.5 2.9z"/>',
     swap: '<path d="M7 16V4M3 8l4-4 4 4"/><path d="M17 8v12M21 16l-4 4-4-4"/>',
+    book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="M9 7h7M9 11h5"/>',
+    chev: '<path d="m6 9 6 6 6-6"/>',
+    arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
     news: '<path d="M4 4h12a2 2 0 0 1 2 2v12a2 2 0 0 0 2 2H6a2 2 0 0 1-2-2z"/><path d="M18 8h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2"/><path d="M8 8h6M8 12h6M8 16h4"/>',
     tv: '<rect x="2" y="7" width="20" height="13" rx="2"/><path d="m17 2-5 5-5-5"/>',
     expand: '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
@@ -66,6 +69,7 @@
     risk: { label: 'Risk & Signals', icon: 'risk', title: 'Risk & signals', sub: 'Market stress, tail risk, drawdowns and trend inflection points', tag: 'new' },
     intel: { label: 'Intelligence', icon: 'intel', title: 'Market intelligence', sub: 'Anomalies, historical pattern checks and AI explanations' },
     shock: { label: 'Shock Sim', icon: 'shock', title: 'Shock simulator', sub: 'Historical sensitivities applied to a hypothetical move' },
+    glossary: { label: 'Glossary', icon: 'book', title: 'Glossary and simple explanations for finance terms', sub: 'Every term used in this dashboard, in plain language, with where to see it' },
     admin: { label: 'Admin', icon: 'admin', title: 'Admin', sub: 'API credentials, source health and reference data' },
   };
 
@@ -228,7 +232,7 @@
   /* ───────── shell ───────── */
   function buildNav() {
     const item = (k) => `<button type="button" data-view="${k}" title="${esc(VIEWS[k].title)}">${ic(VIEWS[k].icon)}<span class="lbl">${esc(VIEWS[k].label)}</span>${VIEWS[k].tag ? `<span class="tag">${VIEWS[k].tag}</span>` : ''}</button>`;
-    const html = ['overview', 'monitor', 'flows'].map(item).join('') + '<span class="nav-sep"></span>' + ['analytics', 'risk', 'intel', 'shock'].map(item).join(''); // Admin is not in the nav: open it at #admin
+    const html = ['overview', 'monitor', 'flows'].map(item).join('') + '<span class="nav-sep"></span>' + ['analytics', 'risk', 'intel', 'shock'].map(item).join('') + '<span class="nav-sep"></span>' + item('glossary'); // Admin is not in the nav: open it at #admin
     $('#nav').innerHTML = html; $('#nav-mobile').innerHTML = html;
     const go = (e) => { const b = e.target.closest('button'); if (b && b.dataset.view) { closeOverlays(); show(b.dataset.view); } };
     $('#nav').onclick = go; $('#nav-mobile').onclick = go;
@@ -262,7 +266,7 @@
     $('#sheet-body').innerHTML = `
       <div class="sh-status">${pill('regime-pill')}${pill('stress-pill')}<span class="xs muted">${esc($('#updated').textContent)}</span></div>
       <div class="sh-sec">Explore</div>
-      <div class="sh-grid">${['intel', 'analytics', 'flows', 'shock'].map(tile).join('')}<button type="button" class="sh-tile" data-act="tv"><span class="sh-ic">${ic('tv')}</span><span>Live TV</span></button><button type="button" class="sh-tile" data-act="news"><span class="sh-ic">${ic('news')}</span><span>News</span></button></div>
+      <div class="sh-grid">${['intel', 'analytics', 'flows', 'shock', 'glossary'].map(tile).join('')}<button type="button" class="sh-tile" data-act="tv"><span class="sh-ic">${ic('tv')}</span><span>Live TV</span></button><button type="button" class="sh-tile" data-act="news"><span class="sh-ic">${ic('news')}</span><span>News</span></button></div>
       <div class="sh-sec">Settings</div>
       <div class="sh-list">
         <button type="button" data-act="theme"><span class="sh-ic">${ic(dark ? 'sun' : 'moon')}</span><span>Appearance</span><b>${dark ? 'Dark' : 'Light'}</b></button>
@@ -779,10 +783,10 @@
     $('#anom-list').onclick = e => { const t = e.target.closest('[data-trendgo]'); if (t) { state.risk.trendId = t.dataset.trendgo; show('risk'); } };
     if (pre.error) $('#pre-body').innerHTML = errorBox(pre.error); else {
       const cm = pre.common;
-      const condRow = (c) => `<div class="cond ${c.hit === null ? 'na' : c.hit ? 'hit' : 'miss'}"><i></i><div class="cl"><b>${esc(c.label)}</b><span class="then">Then: ${esc(c.then)}</span>${c.note ? `<span class="then">${esc(c.note)}</span>` : ''}</div><div class="cn">${esc(c.now)}</div></div>`;
+      const condRow = (c) => `<div class="cond ${c.hit === null ? 'na' : c.hit ? 'hit' : 'miss'}"><i></i><div class="cl"><b>${esc(c.label)}${c.basis ? ` <span class="badge estimate" title="${c.basis === 'model' ? 'Model estimate from public prices' : 'Latest official quarter carried forward with the S&P 500'}">${c.basis}</span>` : ''}</b><span class="then">Then: ${esc(c.then)}</span>${c.note ? `<span class="then">${esc(c.note)}</span>` : ''}</div><div class="cn">${esc(c.now)}</div></div>`;
       $('#pre-body').innerHTML = `
         <div class="pre-common"><div class="pre-common-h"><b>Late-cycle checklist</b><span class="mono dim">${cm.hits} of ${cm.measured} present</span></div><div class="chips-wrap">${cm.conditions.map(c => `<span class="cchip ${c.hit ? 'on' : c.measured ? '' : 'na'}" title="${esc(c.now)}"><i></i>${esc(c.label)}</span>`).join('')}</div><p class="xs muted">Shared by the three episodes. Each chip is a fixed numeric test on current data; hover for the reading. These conditions were present before past crashes and also at many times that were not followed by one.</p></div>
-        <div class="grid g-3 pre-grid">${pre.episodes.map(e => `<div class="episode"><div class="ep-h"><div><b>${esc(e.name)}</b><div class="xs muted mono">peak ${e.peak} → crash ${e.crash}</div></div><div class="ep-score"><b>${e.hits}<span>/${e.measured}</span></b><span class="xs muted">conditions present</span></div></div><span class="meter"><i style="width:${e.resemblance == null ? 0 : (e.resemblance * 100).toFixed(0)}%"></i></span><div class="xs muted">${esc(e.peakToCrash)} · ${esc(e.depth)}</div><p class="sm dim">${esc(e.story)}</p><div class="cond-list">${e.conditions.map(condRow).join('')}</div><div class="xs muted">${e.unmeasured} condition${e.unmeasured === 1 ? '' : 's'} not measured by this dashboard · ${e.sources.map(x => `<a href="${esc(x)}" target="_blank" rel="noopener">${esc(new URL(x).host.replace('www.', ''))}</a>`).join(' · ')}</div></div>`).join('')}</div>`;
+        <div class="grid g-3 pre-grid">${pre.episodes.map(e => `<div class="episode"><div class="ep-h"><div><b>${esc(e.name)}</b><div class="xs muted mono">peak ${e.peak} → crash ${e.crash}</div></div><div class="ep-score"><b>${e.hits}<span>/${e.measured}</span></b><span class="xs muted">conditions present</span></div></div><span class="meter"><i style="width:${e.resemblance == null ? 0 : (e.resemblance * 100).toFixed(0)}%"></i></span><div class="xs muted">${esc(e.peakToCrash)} · ${esc(e.depth)}</div><p class="sm dim">${esc(e.story)}</p><div class="cond-list">${e.conditions.map(condRow).join('')}</div><div class="xs muted">${e.unmeasured ? `${e.unmeasured} condition${e.unmeasured === 1 ? '' : 's'} not measured by this dashboard · ` : 'All conditions measured · '}${e.sources.map(x => `<a href="${esc(x)}" target="_blank" rel="noopener">${esc(new URL(x).host.replace('www.', ''))}</a>`).join(' · ')}</div></div>`).join('')}</div>`;
       $('#pre-method').textContent = pre.method;
     }
     $('#pattern-body').innerHTML = pat.items.map(p => `<div class="pattern"><div class="pattern-h"><b>${esc(p.name)}</b><span class="mono ${p.hits / p.total >= .5 ? 'warn-c' : 'muted'}">${p.hits}/${p.total}</span></div><span class="meter"><i style="width:${(p.resemblance * 100).toFixed(0)}%"></i></span><p class="sm dim">${esc(p.summary)}</p><div>${p.checks.map(c => `<div class="check ${c.hit ? 'hit' : 'miss'}"><i></i><span>${esc(c.label)}</span></div>`).join('')}</div><div class="xs">${p.sources.map(s => `<a href="${esc(s)}" target="_blank" rel="noopener">${esc(new URL(s).host.replace('www.', ''))}</a>`).join(' · ')}</div></div>`).join('');
@@ -1028,8 +1032,55 @@
     } catch (e) { box.innerHTML = errorBox(e.message); }
   }
 
+  /* ═════════════════════ GLOSSARY ═════════════════════ */
+  const slug = (t) => 'g-' + t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  function renderGlossary() {
+    const v = $('#view-glossary'); const G = window.CFT_GLOSSARY || { sections: [], terms: [] };
+    const g = state.gloss || (state.gloss = { q: '', cat: 'all', open: new Set() });
+    const byT = new Map(G.terms.map(x => [x.t, x]));
+    v.innerHTML = `<section class="card gl-hero"><div class="card-b">
+        <div class="gl-intro"><span class="gl-ic">${ic('book')}</span><div><b>Start here</b><p class="sm dim">Prices change for many reasons; this page explains the words used to describe them. Tap a term for the plain explanation, an example from this dashboard, and related terms. <b>Live</b>, <b>Delayed</b> and <b>EOD</b> badges tell you how fresh a number is; <b>bp</b> means 0.01 percentage points.</p></div></div>
+        <label class="search gl-search">${ic('search')}<input type="search" id="gl-q" placeholder="Search a term, e.g. yield curve, VIX, rupiah" value="${esc(g.q)}" autocomplete="off" aria-label="Search the glossary"></label>
+        <div class="chip-row gl-cats" id="gl-cats"><button type="button" class="chip ${g.cat === 'all' ? 'active' : ''}" data-c="all">All <span class="muted">${G.terms.length}</span></button>${G.sections.map(([k, l]) => `<button type="button" class="chip ${g.cat === k ? 'active' : ''}" data-c="${k}">${esc(l)}</button>`).join('')}</div>
+      </div></section><div id="gl-body"></div>`;
+    const termCard = (x) => {
+      const id = slug(x.t); const open = g.open.has(x.t);
+      return `<article class="gl-term ${open ? 'open' : ''}" id="${id}" data-t="${esc(x.t)}">
+        <button type="button" class="gl-h" aria-expanded="${open}"><span class="gl-t"><b>${esc(x.t)}</b>${x.aka ? `<span class="gl-aka">${esc(x.aka.join(' · '))}</span>` : ''}</span><span class="gl-chev">${ic('chev')}</span></button>
+        <p class="gl-s">${esc(x.s)}</p>
+        <div class="gl-d">
+          <p>${esc(x.d)}</p>
+          ${x.x ? `<div class="gl-x"><span class="lab">In this dashboard</span><p>${esc(x.x)}</p></div>` : ''}
+          ${(x.see && x.see.length) || x.v ? `<div class="gl-links">${(x.see || []).filter(n => byT.has(n)).map(n => `<button type="button" class="gl-see" data-see="${esc(n)}">${esc(n)}</button>`).join('')}${x.v && VIEWS[x.v] ? `<button type="button" class="btn ghost gl-go" data-go="${x.v}">${ic(VIEWS[x.v].icon)}Open ${esc(VIEWS[x.v].label)}${ic('arrow')}</button>` : ''}</div>` : ''}
+        </div></article>`;
+    };
+    const match = (x, q) => !q || [x.t, x.s, x.d, x.x || '', (x.aka || []).join(' ')].join(' ').toLowerCase().includes(q);
+    function draw() {
+      const q = g.q.trim().toLowerCase();
+      const secs = G.sections.filter(([k]) => g.cat === 'all' || g.cat === k);
+      let html = ''; let n = 0;
+      for (const [k, label, desc] of secs) {
+        const items = G.terms.filter(x => x.cat === k && match(x, q)).sort((a, b) => q ? (b.t.toLowerCase().includes(q) - a.t.toLowerCase().includes(q)) || a.t.localeCompare(b.t) : 0);
+        if (!items.length) continue; n += items.length;
+        html += `<section class="gl-sec"><div class="gl-sec-h"><h3>${esc(label)}</h3><span class="xs muted">${esc(desc)} · ${items.length}</span></div><div class="gl-grid">${items.map(termCard).join('')}</div></section>`;
+      }
+      $('#gl-body').innerHTML = html || `<section class="card"><div class="card-b">${emptyState(`No term matches "${g.q}". Try a shorter word, or ask the AI reading on Intelligence.`, 'search')}</div></section>`;
+    }
+    draw();
+    let t; $('#gl-q').oninput = (e) => { clearTimeout(t); t = setTimeout(() => { g.q = e.target.value; draw(); }, 120); };
+    $('#gl-cats').onclick = (e) => { const b = e.target.closest('[data-c]'); if (!b) return; g.cat = b.dataset.c; $$('#gl-cats .chip').forEach(x => x.classList.toggle('active', x === b)); draw(); };
+    $('#gl-body').onclick = (e) => {
+      const go = e.target.closest('[data-go]'); if (go) { show(go.dataset.go); return; }
+      const see = e.target.closest('[data-see]');
+      if (see) { const name = see.dataset.see; g.q = ''; g.cat = 'all'; g.open.add(name); $('#gl-q').value = ''; $$('#gl-cats .chip').forEach(x => x.classList.toggle('active', x.dataset.c === 'all')); draw(); const el = document.getElementById(slug(name)); if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1400); } return; }
+      const h = e.target.closest('.gl-term'); if (!h || e.target.closest('a')) return;
+      const name = h.dataset.t; if (g.open.has(name)) g.open.delete(name); else g.open.add(name);
+      h.classList.toggle('open'); const b = $('.gl-h', h); if (b) b.setAttribute('aria-expanded', h.classList.contains('open'));
+    };
+  }
+
   /* ═════════════════════ navigation & boot ═════════════════════ */
-  const renderers = { overview: renderOverview, monitor: renderMonitor, flows: renderFlows, analytics: renderAnalytics, risk: renderRisk, intel: renderIntel, shock: renderShock, admin: renderAdmin };
+  const renderers = { glossary: renderGlossary, overview: renderOverview, monitor: renderMonitor, flows: renderFlows, analytics: renderAnalytics, risk: renderRisk, intel: renderIntel, shock: renderShock, admin: renderAdmin };
   async function show(view) {
     if (!(view in renderers)) view = 'overview';
     state.view = view; const meta = VIEWS[view];

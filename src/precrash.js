@@ -4,15 +4,18 @@
 //
 // Each condition records: what it looked like then (with the source), a measurable test against current
 // data, and the current reading. Conditions the dashboard cannot measure with its data sources are listed
-// as "not measured" rather than guessed — valuation multiples, margin debt, IPO volume, bank funding
-// spreads and mortgage credit quality need licensed or manually maintained series.
+// as "not measured" rather than guessed — margin debt, IPO volume, bank funding spreads and leverage need
+// licensed or manually maintained series. Valuation and systematic selling are measured in valuation.js.
 import { ASSET_MAP } from './universe.js';
 import { getHistory } from './data.js';
 import { performance, windowSlice, mean, isDiffKind } from './analytics.js';
 import { round } from './lib/util.js';
+import { valuation, systematic } from './valuation.js';
 
 const pct = (a, b) => (a != null && b ? (a / b - 1) * 100 : null);
 const fmtPct = (v, d = 1) => (v == null ? 'n/a' : `${v > 0 ? '+' : ''}${v.toFixed(d)}%`);
+const ord = (n) => { const v = Math.round(n); const t = v % 100; return v + (t >= 11 && t <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[v % 10] || 'th')); };
+const qLabel = (d) => `Q${Math.floor((Number(d.slice(5, 7)) - 1) / 3) + 1} ${d.slice(0, 4)}`;
 const fmtBp = (v) => (v == null ? 'n/a' : `${v > 0 ? '+' : ''}${Math.round(v)} bp`);
 
 /** value N calendar days ago (last observation on or before that date) */
@@ -51,6 +54,8 @@ export async function snapshot(ctx) {
   S.house = last(g('HOUSE')); S.houseMax2y = maxOver(g('HOUSE'), 730); S.houseFromPeak = S.house != null && S.houseMax2y != null ? S.house - S.houseMax2y : null;
   S.be10 = last(g('BREAKEVEN10'));
   S.hygVsLqd6m = P.HYG && P.LQD && P.HYG.perf['180D'] != null && P.LQD.perf['180D'] != null ? P.HYG.perf['180D'] - P.LQD.perf['180D'] : null;
+  try { S.val = await valuation(ctx, g('SPX')); } catch (e) { S.val = null; S.valError = e.message; }
+  try { S.sys = await systematic(ctx, g('SPX'), g('VIX')); } catch (e) { S.sys = null; }
   S.asOf = { SPX: P.SPX && P.SPX.asOf, HYOAS: g('HYOAS').length ? g('HYOAS')[g('HYOAS').length - 1][0] : null, HOUSE: g('HOUSE').length ? g('HOUSE')[g('HOUSE').length - 1][0] : null, FEDFUNDS: g('FEDFUNDS').length ? g('FEDFUNDS')[g('FEDFUNDS').length - 1][0] : null };
   return S;
 }
@@ -66,13 +71,29 @@ const C = {
   risingYields: (S, thenTxt, bp = 75) => ({ key: 'yields', label: 'Long yields rising sharply while stocks still rose', then: thenTxt, now: `10Y ${fmtBp(S.y10chg6m)} over 6 months; S&P 500 ${fmtPct(S.spx6m)} over 6 months`, hit: S.y10chg6m != null && S.y10chg6m >= bp && S.spx6m != null && S.spx6m > 0, measured: S.y10chg6m != null }),
   stocksUpBondsDown: (S, thenTxt) => ({ key: 'divergence', label: 'Stocks up while bonds fell (TLT)', then: thenTxt, now: `S&P 500 ${fmtPct(S.spx6m)} vs TLT ${fmtPct(S.tlt6m)} over 6 months`, hit: S.spx6m != null && S.tlt6m != null && S.spx6m > 5 && S.tlt6m < -5, measured: S.spx6m != null && S.tlt6m != null }),
   weakDollar: (S, thenTxt) => ({ key: 'usd', label: 'Dollar weakening', then: thenTxt, now: `DXY ${fmtPct(S.dxy6m)} over 6 months, ${fmtPct(S.dxy1y)} over 1 year`, hit: S.dxy1y != null && S.dxy1y <= -5, measured: S.dxy1y != null }),
-  tightCredit: (S, thenTxt) => ({ key: 'credit', label: 'Credit spreads near cycle lows (complacent credit)', then: thenTxt, now: S.hy == null ? 'n/a' : `HY OAS ${S.hy.toFixed(2)}% (${Math.round(S.hyPct3y * 100)}th percentile of 3 years)`, hit: S.hyPct3y != null && S.hyPct3y <= 0.2, measured: S.hy != null }),
+  tightCredit: (S, thenTxt) => ({ key: 'credit', label: 'Credit spreads near cycle lows (complacent credit)', then: thenTxt, now: S.hy == null ? 'n/a' : `HY OAS ${S.hy.toFixed(2)}% (${ord(S.hyPct3y * 100)} percentile of 3 years)`, hit: S.hyPct3y != null && S.hyPct3y <= 0.2, measured: S.hy != null }),
   creditTurning: (S, thenTxt) => ({ key: 'creditturn', label: 'Credit starting to widen while equities near highs', then: thenTxt, now: `HY OAS ${fmtBp(S.hyFromLow)} off its 1-year low; S&P 500 ${fmtPct(S.spxFromHigh)} from high`, hit: S.hyFromLow != null && S.hyFromLow >= 75 && S.spxFromHigh != null && S.spxFromHigh > -7, measured: S.hyFromLow != null && S.spxFromHigh != null, note: 'Credit led equities by months in 2007: spreads bottomed in June, stocks peaked in October.' }),
   lowVol: (S, thenTxt) => ({ key: 'vol', label: 'Volatility unusually low (complacency)', then: thenTxt, now: S.vix3m == null ? 'n/a' : `VIX 3-month average ${S.vix3m.toFixed(1)}; 1-year low ${S.vixMin1y.toFixed(1)}`, hit: S.vix3m != null && S.vix3m < 14, measured: S.vix3m != null }),
   narrowLeadership: (S, thenTxt) => ({ key: 'breadth', label: 'Narrow leadership: large-cap tech far ahead of small caps', then: thenTxt, now: `Nasdaq 100 ${fmtPct(S.ndx1y)} vs Russell 2000 ${fmtPct(S.rut1y)} over 1 year (gap ${fmtPct(S.ndxVsRut1y)})`, hit: S.ndxVsRut1y != null && S.ndxVsRut1y >= 20, measured: S.ndxVsRut1y != null }),
   parabolic: (S, thenTxt) => ({ key: 'parabolic', label: 'Parabolic rise in the speculative leader', then: thenTxt, now: `Nasdaq 100 ${fmtPct(S.ndx1y)} over 1 year; Bitcoin ${fmtPct(S.btc1y)}`, hit: (S.ndx1y != null && S.ndx1y >= 50) || (S.btc1y != null && S.btc1y >= 150), measured: S.ndx1y != null }),
   oilShock: (S, thenTxt, thr = 50) => ({ key: 'oil', label: 'Oil price shock', then: thenTxt, now: `WTI ${fmtPct(S.wti1y)} over 1 year, ${fmtPct(S.wti2y)} over 2 years`, hit: (S.wti1y != null && S.wti1y >= thr) || (S.wti2y != null && S.wti2y >= thr * 1.5), measured: S.wti1y != null }),
   housingRollover: (S, thenTxt) => ({ key: 'housing', label: 'House-price growth rolling over from a boom', then: thenTxt, now: S.house == null ? 'n/a' : `Case-Shiller ${fmtPct(S.house)} y/y, ${S.houseFromPeak != null ? S.houseFromPeak.toFixed(1) : 'n/a'} points below its 2-year peak (as of ${S.asOf.HOUSE})`, hit: S.houseMax2y != null && S.houseMax2y >= 8 && S.houseFromPeak <= -5, measured: S.house != null, note: 'Monthly series, about two months lagged.' }),
+  valuation: (S, label, thenTxt, epYear, thr = 0.9) => {
+    const v = S.val; if (!v) return { key: 'valuation', label, then: thenTxt, now: 'Valuation data unavailable right now', hit: null, measured: false, note: S.valError || 'FRED did not respond.' };
+    const g = v.toGdp, pr = v.toProfits, ep = v.episodes[epYear] || {};
+    const thenRef = ep.toGdp ? ` · market value/GDP was ${ep.toGdp.value.toFixed(0)}%${ep.toProfits ? `, ${ep.toProfits.value.toFixed(1)}× profits` : ''} (${qLabel(ep.toGdp.quarter)})` : '';
+    return { key: 'valuation', label, then: thenTxt + thenRef,
+      now: `US equity market value ${g.nowcast.toFixed(0)}% of GDP (${ord(g.pctile * 100)} percentile since ${g.since.slice(0, 4)})${pr ? `; ${pr.nowcast.toFixed(1)}× after-tax corporate profits (${ord(pr.pctile * 100)} percentile)` : ''}`,
+      hit: g.pctile >= thr, measured: true, basis: 'nowcast',
+      note: `Fed Z.1 and BEA data for ${qLabel(g.quarter)} (quarterly), carried forward with the S&P 500's ${v.spxSinceQuarter >= 0 ? '+' : ''}${v.spxSinceQuarter.toFixed(1)}% since ${g.quarterEnd}. Present when market value/GDP is in the top ${Math.round((1 - thr) * 100)}% of its history.` };
+  },
+  mechanical: (S, thenTxt) => {
+    const m = S.sys; if (!m) return { key: 'plumbing', label: 'Mechanical selling in place', then: thenTxt, now: 'Model inputs unavailable right now', hit: null, measured: false, note: 'S&P 500 or VIX history did not load.' };
+    return { key: 'plumbing', label: 'Mechanical selling in place', then: thenTxt,
+      now: `Vol-target model ${m.exposure.toFixed(2)}× exposure (${ord(m.exposurePct * 100)} percentile of 5 years; 21-day vol ${m.realisedVol.toFixed(1)}%)${m.term != null ? `; VIX/VIX3M ${m.term.toFixed(2)} (${m.term > 1 ? 'inverted' : 'normal'})` : ''}; S&P 500 ${m.dist50 >= 0 ? '+' : ''}${m.dist50.toFixed(1)}% vs 50-day · ${m.state}`,
+      hit: m.primed || m.active, measured: true, basis: 'model',
+      note: 'Model estimate from public prices, not reported positions. Primed: a 10%-volatility-target fund would be near full exposure (top quarter of 5 years), so a volatility jump forces selling. Under way: VIX above 3-month VIX, or model exposure cut 30%+ in 10 sessions.' };
+  },
   unmeasured: (key, label, thenTxt, why) => ({ key, label, then: thenTxt, now: 'Not measured', hit: null, measured: false, note: why }),
 };
 
@@ -88,8 +109,8 @@ export const EPISODES = [
       C.stocksUpBondsDown(S, 'Bonds fell through most of 1987 as equities made new highs'),
       C.tightening(S, 'Fed raised the discount rate from 5.5% to 6% on 4 September 1987', 25, '1y'),
       C.weakDollar(S, 'Dollar had fallen roughly 40% against the yen and mark since 1985; policy coordination (Louvre Accord) was fraying by October 1987'),
-      C.unmeasured('valuation', 'Stretched valuation', 'Trailing P/E around 20–23, well above the 1980s average', 'Earnings-based valuation needs a licensed data feed.'),
-      C.unmeasured('plumbing', 'Mechanical selling in place', 'Portfolio insurance covered an estimated $60–90bn of equities, all programmed to sell as prices fell', 'No public series tracks systematic-strategy positioning; today the equivalent is vol-targeting and option-dealer hedging.'),
+      C.valuation(S, 'Stretched valuation', 'Trailing P/E around 20–23, well above the 1980s average', 1987, 0.9),
+      C.mechanical(S, 'Portfolio insurance covered an estimated $60–90bn of equities, all programmed to sell as prices fell; today the equivalent is volatility-targeting and trend-following funds'),
     ],
   },
   {
@@ -104,7 +125,7 @@ export const EPISODES = [
       C.inversion(S, '10Y–2Y inverted in February 2000, about a month before the Nasdaq peak'),
       C.oilShock(S, 'WTI rose from about $11 in late 1998 to $34 by March 2000', 50),
       C.lowVol(S, 'Volatility was not low: VIX averaged above 20 in early 2000. This episode did not come out of calm'),
-      C.unmeasured('valuation', 'Extreme valuation', 'Nasdaq 100 trailing P/E above 100; S&P 500 above 30 (CAPE 44, the highest on record)', 'Valuation multiples need a licensed data feed.'),
+      C.valuation(S, 'Extreme valuation', 'Nasdaq 100 trailing P/E above 100; S&P 500 above 30 (CAPE 44, the highest on record)', 2000, 0.95),
       C.unmeasured('froth', 'Peak speculation', '486 IPOs in 1999 with average first-day gains near 70%; margin debt hit a record $278bn in March 2000', 'IPO and margin-debt series are not available through this dashboard\'s free sources.'),
     ],
   },
@@ -141,6 +162,8 @@ export function commonChecklist(S) {
     C.lowVol(S, 'Volatility was near record lows before 2007; not before 1987 or 2000'),
     C.narrowLeadership(S, 'Narrow leadership defined 1999–2000'),
     C.oilShock(S, 'Oil spiked before 2000 and 2008'),
+    C.valuation(S, 'Valuation in the top 10% of its history', 'Stretched before 1987 and extreme before 2000; elevated but not extreme before 2007', 2000, 0.9),
+    C.mechanical(S, 'Pre-programmed selling amplified 1987 (portfolio insurance); volatility-targeting plays that role today'),
   ];
 }
 

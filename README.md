@@ -39,6 +39,22 @@ edge for that long, so all visitors share one upstream call per interval. Each u
 provider and timestamp. Index levels only come from a provider that publishes the index (no ETF proxies). Non-US indices,
 yields, spreads, oil, copper, grains and macro series keep their standard (delayed / end-of-day) sources.
 
+## Valuation and systematic-selling measures
+
+Two pre-crash conditions are measured from free official data and public prices (`src/valuation.js`):
+
+* **Stretched valuation**: market value of US corporate equities ÷ GDP (FRED `NCBEILQ027S` ÷ `GDP`) and ÷ after-tax
+  corporate profits (`CP`), ranked against history since 1947. The quarterly value is carried forward with the S&P 500
+  move since quarter end and labelled *nowcast*. Reference points: 1987 ≈ 60% of GDP, 2000 ≈ 163%, 2007 ≈ 121%.
+* **Mechanical selling in place**: a 10%-volatility-target model (exposure = 10 ÷ 21-day realised vol, capped 1.5×),
+  VIX ÷ VIX3M term structure, and distance from the 50-day average. *Primed* when model exposure is in the top quarter
+  of five years; *under way* when VIX > VIX3M or exposure has been cut 30%+ in ten sessions. Labelled *model*.
+
+## Glossary
+
+`#glossary` explains every term used in the app in plain language (86 terms in 8 sections, searchable, with an
+example from the dashboard and related terms). Content lives in `public/glossary.js`.
+
 ## Data sources
 
 | Source | Key | Used for | Freshness |
