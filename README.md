@@ -45,6 +45,14 @@ edge for that long, so all visitors share one upstream call per interval. Each u
 provider and timestamp. Index levels only come from a provider that publishes the index (no ETF proxies). Non-US indices,
 yields, spreads, oil, copper, grains and macro series keep their standard (delayed / end-of-day) sources.
 
+**US Dollar Index and commodities:** ICE does not license the Dollar Index to any of these providers, so the router
+computes it with ICE's published formula (50.14348112 × EURUSD^-0.576 × USDJPY^0.136 × GBPUSD^-0.119 × USDCAD^0.091 ×
+USDSEK^0.042 × USDCHF^0.036) from six live FX rates, labelled *ICE formula*; it is live only when all six are priced and the
+three extra legs are polled only while DXY uses the formula. WTI, Brent, natural gas and copper can route to Finnhub
+(OANDA prices, paid plans) or Twelve Data (paid plans); until a scan shows ✓ they keep their delayed futures source.
+Twelve Data requests are split into credit-sized chunks refreshed in turn, and *Scan my plans* tests a credit's worth of
+Twelve Data symbols per press (the Admin line says how many are left).
+
 **WebSocket streams (Admin → credentials → Real-time):** each provider that offers a stream has its own switch.
 Vercel Edge cannot hold sockets open, so streams run in the browser, which means the key travels with the stream:
 
