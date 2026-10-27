@@ -194,12 +194,29 @@
   /* ───────── shell ───────── */
   function buildNav() {
     const item = (k) => `<button type="button" data-view="${k}" title="${esc(VIEWS[k].title)}">${ic(VIEWS[k].icon)}<span class="lbl">${esc(VIEWS[k].label)}</span>${VIEWS[k].tag ? `<span class="tag">${VIEWS[k].tag}</span>` : ''}</button>`;
-    const html = ['overview', 'monitor', 'flows'].map(item).join('') + '<span class="nav-sep"></span>' + ['analytics', 'risk', 'intel', 'shock'].map(item).join('') + '<span class="nav-sep"></span>' + item('admin');
+    const html = ['overview', 'monitor', 'flows'].map(item).join('') + '<span class="nav-sep"></span>' + ['analytics', 'risk', 'intel', 'shock'].map(item).join(''); // Admin is not in the nav: open it at #admin
     $('#nav').innerHTML = html; $('#nav-mobile').innerHTML = html;
     const go = (e) => { const b = e.target.closest('button'); if (b && b.dataset.view) { closeOverlays(); show(b.dataset.view); } };
     $('#nav').onclick = go; $('#nav-mobile').onclick = go;
     $('#side-btn').onclick = () => { const o = $('#side').classList.toggle('open'); if (o) openScrim(() => $('#side').classList.remove('open')); else closeOverlays(); };
     $('#side-close').onclick = closeOverlays;
+    initSideResize();
+  }
+  /* Resizable sidebar (docked layout only). Width is kept per browser; double-click the handle to reset. */
+  const SIDE_MIN = 260, SIDE_MAX = 640, SIDE_DEF = 312;
+  const clampSide = (w) => Math.round(Math.max(SIDE_MIN, Math.min(SIDE_MAX, Math.min(w, window.innerWidth * 0.5))));
+  function setSideW(w, save = true) { const v = clampSide(w); document.documentElement.style.setProperty('--side-w', v + 'px'); if (save) store.set('cft:sideW', v); return v; }
+  function initSideResize() {
+    const h = $('#side-resize'); if (!h) return;
+    const saved = store.get('cft:sideW', null); if (saved) setSideW(saved, false);
+    let startX = 0, startW = 0, drag = false;
+    const move = (e) => { if (!drag) return; const x = (e.touches ? e.touches[0] : e).clientX; setSideW(startW + x - startX, false); };
+    const end = () => { if (!drag) return; drag = false; document.body.classList.remove('resizing'); h.classList.remove('active'); setSideW(parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--side-w')) || SIDE_DEF); window.dispatchEvent(new Event('resize')); };
+    h.addEventListener('pointerdown', (e) => { drag = true; startX = e.clientX; startW = $('#side').getBoundingClientRect().width; document.body.classList.add('resizing'); h.classList.add('active'); h.setPointerCapture(e.pointerId); e.preventDefault(); });
+    h.addEventListener('pointermove', move); h.addEventListener('pointerup', end); h.addEventListener('pointercancel', end);
+    h.addEventListener('dblclick', () => { setSideW(SIDE_DEF); window.dispatchEvent(new Event('resize')); });
+    h.addEventListener('keydown', (e) => { const cur = $('#side').getBoundingClientRect().width; if (e.key === 'ArrowLeft') { setSideW(cur - 16); e.preventDefault(); } if (e.key === 'ArrowRight') { setSideW(cur + 16); e.preventDefault(); } });
+    window.addEventListener('resize', () => { const cur = store.get('cft:sideW', null); if (cur) setSideW(cur, false); });
   }
   function setPills(regime, stress) {
     if (regime) { const p = $('#regime-pill'); p.className = 'pill ' + (regime.label.startsWith('RISK-ON') ? 'on' : regime.label.startsWith('RISK-OFF') ? 'off' : 'mid'); $('span', p).textContent = regime.label.replace(' / MIXED', ''); p.title = `Rules-based regime score ${regime.score} (−1 risk-off … +1 risk-on)`; }
@@ -669,7 +686,7 @@
       const r = await api('/intel/reading');
       const rd = r.reading;
       meta.innerHTML = rd ? `<span class="badge ${r.stale ? 'mid' : 'measured'}" title="${esc(r.why.join('; ') || 'Reading matches the current data')}">${r.stale ? 'may be outdated' : 'current'}</span><span class="xs muted">${fmt.ago(rd.generatedAt)} · ${esc(rd.model)} · ${rd.trigger === 'schedule' ? 'scheduled' : 'manual'}</span>` : '';
-      if (!rd) { box.innerHTML = `<div class="callout">${ic('info')}<div>No AI reading has been generated yet.${isAdmin ? ' Choose a model and press <b>Refresh reading</b>.' : ' An administrator can generate one from the Admin page, or switch on the daily schedule.'}</div></div>`; return; }
+      if (!rd) { box.innerHTML = `<div class="callout">${ic('info')}<div>No AI reading has been generated yet.${isAdmin ? ' Choose a model and press <b>Refresh reading</b>.' : ' An administrator can generate one or switch on the daily schedule.'}</div></div>`; return; }
       renderFindings(rd, box);
       if (r.stale && r.why.length) box.insertAdjacentHTML('afterbegin', `<div class="callout warn">${ic('alert')}<div><b>Since this reading was generated:</b> ${esc(r.why.join('; '))}.${isAdmin ? ' Press Refresh reading to update it.' : ''}</div></div>`);
     } catch (e) { box.innerHTML = errorBox(e.message); }
