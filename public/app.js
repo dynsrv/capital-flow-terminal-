@@ -119,11 +119,45 @@
   const badge = (q) => { const f = q.stale ? 'stale' : (q.error && !q.available) ? 'error' : (q.freshness || 'eod'); const t = q.stale ? 'Stale: showing the last cached value. Source error: ' + (q.error || '') : 'Data freshness: ' + f; return `<span class="badge ${f}" title="${esc(t)}">${f === 'realtime' ? 'live' : f}</span>`; };
   const heat = (v, max) => { if (v == null || !isFinite(v)) return 'var(--surface-2)'; const t = Math.max(-1, Math.min(1, v / (max || 1))); const p = Math.round(10 + 52 * Math.abs(t)); return `color-mix(in srgb, var(${t >= 0 ? '--up' : '--down'}) ${p}%, var(--surface-2))`; };
   const tok = () => { const g = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim(); return { fg: g('--fg'), fg2: g('--fg-2'), fg3: g('--fg-3'), line: g('--line'), line2: g('--line-2'), surface: g('--surface'), surface2: g('--surface-2'), bg: g('--bg'), accent: g('--accent'), blue: g('--blue'), violet: g('--violet'), teal: g('--teal'), up: g('--up'), down: g('--down'), warn: g('--warn'), mono: g('--mono'), c1: g('--c1'), c2: g('--c2'), c3: g('--c3'), c4: g('--c4'), dark: document.documentElement.dataset.theme !== 'light' }; };
-  // Chart palette from the brand swatch: crimson #af2735, navy #17243e, steel #244667, teal #559596.
-  // Fills use the exact swatch; thin lines on the dark theme use lifted tints of navy and steel so they stay legible.
-  const series = (T) => T.dark ? [T.c1, '#5b8ac0', T.c4, '#a4b5d1', '#d9707a', '#86aedb', '#8cc7c6', '#6f7f99'] : [T.c1, T.c3, T.c4, T.c2, '#d4717a', '#5f86b0', '#8fbfbf', '#5a6b85'];
-  const CLS_COLOR = (T) => { const S = series(T); return { equity: S[0], rates: S[1], credit: S[3], crypto: S[4], commodity: S[2], fx: S[5], macro: T.fg3 }; };
+  // Chart palette from the brand swatch: red #ff433d, blue #0068ff, orange #fb8b1e, mint #4af6c3 on black.
+  // The four swatch colours come first; series five onward use lighter (dark theme) or deeper (light theme) tints of the same hues.
+  const series = (T) => T.dark ? [T.c1, '#3d8bff', T.c3, T.c4, '#ff8f8b', '#9cc4ff', '#fdba76', '#a6fbe0'] : [T.c1, T.c2, T.c3, T.c4, '#b8231e', '#0048b3', '#b85f00', '#0b8a64'];
+  const CLS_COLOR = (T) => { const S = series(T); return { equity: S[0], rates: S[1], credit: S[5], crypto: S[3], commodity: S[2], fx: S[6], macro: T.fg3 }; };
   const shade = (hex, f) => { const h = hex.replace('#', ''); const n = parseInt(h.length === 3 ? h.split('').map(c => c + c).join('') : h, 16); const r = n >> 16, g = (n >> 8) & 255, b = n & 255; const m = (c) => Math.round(f < 0 ? c * (1 + f) : c + (255 - c) * f); return '#' + [m(r), m(g), m(b)].map(x => x.toString(16).padStart(2, '0')).join(''); };
+
+  // Text colour that stays readable on a given fill: black on light fills (mint, orange), white on dark ones.
+  const inkOn = (hex) => { const h = String(hex || '').replace('#', ''); if (h.length !== 6) return '#fff'; const [r, g, b] = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16) / 255).map(c => c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4); return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.32 ? '#000' : '#fff'; };
+  /* ───────── Title Case for titles and labels ─────────
+     Applied to the text of headings, navigation, buttons, badges and labels (not to sentences, headlines or data).
+     Acronyms and tickers keep their capitals; short joining words stay lowercase unless they open the phrase. */
+  const SMALL = new Set(['a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'from', 'in', 'into', 'of', 'on', 'or', 'per', 'the', 'to', 'vs', 'via', 'with']);
+  const ACR = { eod: 'EOD', ai: 'AI', id: 'ID', us: 'US', usd: 'USD', etf: 'ETF', etfs: 'ETFs', vix: 'VIX', oas: 'OAS', gdp: 'GDP', cpi: 'CPI', fx: 'FX', idr: 'IDR', ihsg: 'IHSG', bp: 'bp', tv: 'TV', api: 'API', url: 'URL', utc: 'UTC', ytd: 'YTD', hy: 'HY', ig: 'IG', em: 'EM', uk: 'UK', eu: 'EU', fred: 'FRED', eia: 'EIA', csv: 'CSV', ols: 'OLS', yoy: 'YoY', '1d': '1D', '30d': '30D', '1y': '1Y', '5y': '5Y', '10y': '10Y' };
+  function titleCase(str) {
+    if (!/[a-z]/i.test(str)) return str;
+    const letters = str.replace(/[^A-Za-z]/g, '');
+    let t = (letters.length >= 6 && letters === letters.toUpperCase() && /[A-Z]{4,}/.test(str)) ? str.toLowerCase() : str; // SHOUTED text → normal first
+    let first = true;
+    return t.replace(/[A-Za-z0-9][A-Za-z0-9'’&.]*/g, (w, i) => {
+      const lw = w.toLowerCase(); const isFirst = first; first = false;
+      if (ACR[lw]) return ACR[lw];
+      if (/[A-Z]/.test(w.slice(1)) || /\d/.test(w) || w.includes('&')) return w; // tickers, 10Y, S&P, iShares
+      const prev = t.slice(0, i).trimEnd().slice(-1);
+      const isLast = !/[A-Za-z0-9]/.test(t.slice(i + w.length));
+      if (!isFirst && !isLast && SMALL.has(lw) && prev !== ':' && prev !== '·' && prev !== '/' && (prev !== '-' || /^(in|of|to|a|the|and)$/.test(lw))) return lw;
+      return w.charAt(0).toUpperCase() + w.slice(1);
+    });
+  }
+  const TC_SEL = '.strip-seg span, .comp .l, .nav .lbl, .card-h h3, .page-head h1, .side-h h2, .kpi-top > span, .badge, .pill > span, .btn, .seg button, .chip, .cchip, table.t th, .field > label, .pop-g, .news-day, .news-item .ct, .reading .lab, .finding h4, .finding .row > b, .drawer-h h3, .mini-item .lab, .heat-row .cls, .stat span, .tag, .kv dt, .regime-head .big, .tv-poster b, .legend span, .gauge-l span';
+  function applyTitleCase(root = document) {
+    const els = root.querySelectorAll ? root.querySelectorAll(TC_SEL) : [];
+    for (const el of els) {
+      const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); let n;
+      while ((n = w.nextNode())) { if (n.parentElement && n.parentElement.closest('input, select, option, textarea, code')) continue; const v = n.nodeValue; if (v && v.trim()) { const nv = titleCase(v); if (nv !== v) n.nodeValue = nv; } }
+    }
+  }
+  let tcQueued = false;
+  const tcObserver = new MutationObserver(() => { if (tcQueued) return; tcQueued = true; requestAnimationFrame(() => { tcQueued = false; applyTitleCase(); }); });
+  tcObserver.observe(document.body, { childList: true, subtree: true });
 
   /* ───────── charts (ResizeObserver keeps every chart sized to its card) ───────── */
   const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(entries => entries.forEach(e => { const c = window.echarts && echarts.getInstanceByDom(e.target); if (c) c.resize(); })) : null;
@@ -349,14 +383,14 @@
     $('#kpis').onkeydown = e => { if (e.key === 'Enter') { const k = e.target.closest('.kpi'); if (k) openDrawer(k.dataset.id); } };
 
     // Concentration
-    const T = tok(); const COL = { EQ_GLOBAL: T.c1, FI_GLOBAL: T.c3, GOLD_STOCK: T.c4, CRYPTO_TOTAL: T.c2 };
-    const KID = { EQ_US: shade(T.c1, -0.28), FI_US: T.c2 };
+    const T = tok(); const COL = { EQ_GLOBAL: T.c1, FI_GLOBAL: T.c2, GOLD_STOCK: T.c3, CRYPTO_TOTAL: T.c4 };
+    const KID = { EQ_US: shade(T.c1, -0.3), FI_US: shade(T.c2, -0.35) };
     const total = o.sizes.reduce((s, z) => s + (z.usd || 0), 0);
-    $('#size-strip').innerHTML = o.sizes.map(z => `<div class="strip-seg ${total && z.usd / total < 0.12 ? 'narrow' : ''}" style="flex:${z.usd || 0};background:${COL[z.id]};box-shadow:inset 0 0 0 1px rgba(255,255,255,.10)" title="${esc(z.label)}: ${fmt.usd(z.usd)} (${total ? (z.usd / total * 100).toFixed(1) : '—'}%)"><span>${esc(z.label)}</span><b>${fmt.usd(z.usd)} · ${total ? Math.round(z.usd / total * 100) : '—'}%</b></div>`).join('');
+    $('#size-strip').innerHTML = o.sizes.map(z => `<div class="strip-seg ${total && z.usd / total < 0.12 ? 'narrow' : ''}" style="flex:${z.usd || 0};background:${COL[z.id]};color:${inkOn(COL[z.id])};box-shadow:inset 0 0 0 1px rgba(255,255,255,.10)" title="${esc(z.label)}: ${fmt.usd(z.usd)} (${total ? (z.usd / total * 100).toFixed(1) : '—'}%)"><span>${esc(z.label)}</span><b>${fmt.usd(z.usd)} · ${total ? Math.round(z.usd / total * 100) : '—'}%</b></div>`).join('');
     $('#size-legend').innerHTML = o.sizes.map(z => `<span><i class="dot" style="background:${COL[z.id]};border-radius:3px"></i>${esc(z.label)}</span>`).join('');
     const leaves = [];
-    for (const z of o.sizes) { const kids = (z.children || []).filter(c => c.usd > 0 && c.usd / total >= 0.04); if (kids.length) kids.forEach((c) => leaves.push({ name: c.label, value: c.usd, grp: z.label, ref: { ...c, measure: z.measure, source: z.source, asOf: z.asOf, live: z.live }, itemStyle: { color: KID[c.id] || COL[z.id] } })); else leaves.push({ name: z.id === 'GOLD_STOCK' ? 'Gold' : z.id === 'CRYPTO_TOTAL' ? 'Crypto' : z.label, value: z.usd || 0, grp: z.label, ref: z, itemStyle: { color: COL[z.id] } }); }
-    chart('#treemap', { tooltip: { formatter: p => { const r = p.data.ref || {}; return `<b>${esc(p.name)}</b><br>${fmt.usd(p.value)} · ${(p.value / total * 100).toFixed(1)}% of total<br><span style="opacity:.7">${esc(String(r.measure || '').replace(/_/g, ' '))}${r.live ? ' · live' : r.source ? ' · ' + esc(r.source) : ''}</span>`; } }, series: [{ type: 'treemap', roam: false, nodeClick: false, breadcrumb: { show: false }, left: 0, right: 0, top: 0, bottom: 0, squareRatio: 1.2, label: { show: true, overflow: 'truncate', fontFamily: T.mono, fontSize: 12, color: '#fff', lineHeight: 17, formatter: p => p.value / total < 0.03 ? '' : `{n|${p.name}}\n{v|${fmt.usd(p.value)}}`, rich: { n: { fontSize: 12, color: 'rgba(255,255,255,.9)' }, v: { fontSize: 15, fontWeight: 600, color: '#fff' } } }, levels: [{ itemStyle: { borderColor: T.surface, borderWidth: 0, gapWidth: 4 } }, { itemStyle: { borderColor: 'rgba(255,255,255,.10)', borderWidth: 1, borderRadius: 6 } }], data: leaves }] });
+    for (const z of o.sizes) { const kids = (z.children || []).filter(c => c.usd > 0 && c.usd / total >= 0.04); if (kids.length) kids.forEach((c) => leaves.push({ name: c.label, value: c.usd, grp: z.label, ref: { ...c, measure: z.measure, source: z.source, asOf: z.asOf, live: z.live }, itemStyle: { color: KID[c.id] || COL[z.id] }, label: { color: inkOn(KID[c.id] || COL[z.id]) } })); else leaves.push({ name: z.id === 'GOLD_STOCK' ? 'Gold' : z.id === 'CRYPTO_TOTAL' ? 'Crypto' : z.label, value: z.usd || 0, grp: z.label, ref: z, itemStyle: { color: COL[z.id] }, label: { color: inkOn(COL[z.id]) } }); }
+    chart('#treemap', { tooltip: { formatter: p => { const r = p.data.ref || {}; return `<b>${esc(p.name)}</b><br>${fmt.usd(p.value)} · ${(p.value / total * 100).toFixed(1)}% of total<br><span style="opacity:.7">${esc(String(r.measure || '').replace(/_/g, ' '))}${r.live ? ' · live' : r.source ? ' · ' + esc(r.source) : ''}</span>`; } }, series: [{ type: 'treemap', roam: false, nodeClick: false, breadcrumb: { show: false }, left: 0, right: 0, top: 0, bottom: 0, squareRatio: 1.2, label: { show: true, overflow: 'truncate', fontFamily: T.mono, fontSize: 12, color: '#fff', lineHeight: 17, formatter: p => p.value / total < 0.03 ? '' : `{n|${titleCase(p.name)}}\n{v|${fmt.usd(p.value)}}`, rich: { n: { fontSize: 12 }, v: { fontSize: 15, fontWeight: 600 } } }, levels: [{ itemStyle: { borderColor: T.surface, borderWidth: 0, gapWidth: 4 } }, { itemStyle: { borderColor: 'rgba(255,255,255,.10)', borderWidth: 1, borderRadius: 6 } }], data: leaves }] });
     $('#treemap-note').innerHTML = o.sizes.map(s => `<b>${esc(s.label)}</b> ${esc(s.measure.replace(/_/g, ' '))}, ${s.live ? 'live' : 'reference'} (${esc(s.note || s.source)}${s.asOf ? ', ' + esc(String(s.asOf).slice(0, 10)) : ''})${s.error ? ` <span class="down">${/429/.test(s.error) ? 'source rate-limited, retrying shortly' : 'source unavailable'}</span>` : ''}`).join(' · ') + '. Market cap, debt outstanding and physical stock value are different measures and none of them is a capital flow.';
 
     // Regime
