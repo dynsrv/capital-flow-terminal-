@@ -13,6 +13,7 @@ cat > "$OUT/functions/api.func/.vc-config.json" <<'JSON'
 JSON
 cat > "$OUT/config.json" <<'JSON'
 { "version": 3,
+  "crons": [ { "path": "/api/cron/refresh", "schedule": "0 22 * * *" } ],
   "routes": [
     { "src": "^/api(?:/.*)?$", "dest": "/api" },
     { "handle": "filesystem" },

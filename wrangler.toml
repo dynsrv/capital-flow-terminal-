@@ -36,6 +36,7 @@ TTL_MACRO = "3600"
 
 # Secrets — set with `wrangler secret put <NAME>` (never commit values):
 #   ADMIN_TOKEN        required to open /admin and save credentials
+#   CRON_SECRET        optional; lets an external scheduler call /api/cron/refresh (Vercel sets it automatically)
 #   FRED_API_KEY       optional (keyless CSV endpoint is used otherwise)
 #   EIA_API_KEY        optional (energy spot prices)
 #   ANTHROPIC_API_KEY  optional (AI Market Intelligence explanations)

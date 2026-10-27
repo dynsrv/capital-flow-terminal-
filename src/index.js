@@ -11,6 +11,7 @@ import * as R from './risk.js';
 import * as I from './insights.js';
 import { testCredential } from './keytest.js';
 import { preCrash } from './precrash.js';
+import { getReading, refreshReading, scheduledRefresh, listModels } from './reading.js';
 
 // CORS so the published artifact (or any front-end) can call this API.
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-headers': 'authorization,content-type' };
@@ -69,9 +70,18 @@ async function handleApi(request, env, url) {
     if (p === '/risk/inflections') return wrap(await I.annotateSignals(ctx, await R.inflections(ctx)));
     if (p === '/risk/trend') return wrap(await R.trend(ctx, url.searchParams.get('id') || 'SPX', url.searchParams.get('window') || '1Y'));
     if (p === '/analytics/leaders') return wrap(await R.leaders(ctx, url.searchParams.get('anchor') || 'SPX'));
+    if (p === '/intel/reading') return wrap(await getReading(ctx));
     if (p === '/intel/explain') {
-      let body = {}; if (request.method === 'POST') { try { body = await request.json(); } catch (e) {} }
-      return wrap(await intelligence(ctx, { ids: body.ids, question: body.question }));
+      // Model calls cost money: admin only. Visitors read the stored reading from /intel/reading.
+      const auth = checkAdminAuth(request, env); if (!auth.ok) return error('Refreshing the AI reading requires the admin token', 401);
+      let body = {}; try { body = await request.json(); } catch (e) {}
+      return wrap(await intelligence(ctx, { ids: body.ids, question: body.question, model: body.model }));
+    }
+    if (p === '/cron/refresh') {
+      const secret = env.CRON_SECRET; const auth = request.headers.get('authorization') || '';
+      const okCron = secret && auth === `Bearer ${secret}`; const okAdmin = checkAdminAuth(request, env).ok;
+      if (!okCron && !okAdmin) return error('Unauthorised', 401);
+      return wrap(await scheduledRefresh(ctx));
     }
 
     if (p === '/shock/betas') {
@@ -92,6 +102,11 @@ async function handleApi(request, env, url) {
         const body = await request.json();
         await saveAdminKeys(env, body);
         return wrap({ saved: Object.keys(body) });
+      }
+      if (p === '/admin/models') return wrap(await listModels(config));
+      if (p === '/admin/ai-refresh' && request.method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        return wrap({ reading: await refreshReading(ctx, { model: body.model, question: body.question, trigger: 'admin' }) });
       }
       if (p === '/admin/test' && request.method === 'POST') {
         const body = await request.json().catch(() => ({}));
@@ -137,6 +152,7 @@ export default {
     const c = ctxFor(env, config);
     ctx.waitUntil((async () => {
       try { await getQuotes(c, null); await A.regime(c); } catch (e) { console.log('warm failed', e.message); }
+      try { if (new Date().getUTCHours() === 22 && new Date().getUTCMinutes() < 5) console.log('ai refresh', JSON.stringify(await scheduledRefresh(c))); } catch (e) { console.log('ai refresh failed', e.message); }
     })());
   },
 };

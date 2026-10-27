@@ -5,6 +5,7 @@
 import { fetchJSON } from './lib/util.js';
 import { anomalies, regime, patterns, performance } from './analytics.js';
 import { preCrash } from './precrash.js';
+import { stressIndex } from './risk.js';
 
 const SYSTEM = `You are a sell-side cross-asset strategist writing for an institutional terminal.
 Rules:
@@ -38,7 +39,7 @@ async function searchNews(config, query) {
   return { items: [], note: `Search failed (${errors.join('; ')})` };
 }
 
-export async function intelligence(ctx, { ids, question } = {}) {
+export async function intelligence(ctx, { ids, question, model } = {}) {
   const { config } = ctx;
   const universeIds = ids && ids.length ? ids : ['SPX', 'NDX', 'RUT', 'SX5E', 'NKY', 'SHCOMP', 'EEM', 'UST2Y', 'UST10Y', 'T10Y2Y', 'HYOAS', 'IGOAS', 'BTC', 'ETH', 'SOL', 'GOLD', 'SILVER', 'WTI', 'NATGAS', 'COPPER', 'DXY', 'USDJPY', 'VIX'];
   const [an, reg, pat, perf, pre] = await Promise.all([anomalies(ctx, universeIds), regime(ctx), patterns(ctx), performance(ctx, universeIds), preCrash(ctx).catch(() => null)]);
@@ -48,6 +49,7 @@ export async function intelligence(ctx, { ids, question } = {}) {
     anomalies: an.items.slice(0, 12),
     crashSignatures: pat.items.map(p => ({ episode: p.name, hits: `${p.hits}/${p.total}`, present: p.checks.filter(c => c.hit).map(c => c.label) })),
     preCrashConditions: pre ? { lateCycleChecklist: { present: pre.common.present, absent: pre.common.absent }, episodes: pre.episodes.map(e => ({ episode: e.name, measuredHits: `${e.hits}/${e.measured}`, present: e.conditions.filter(c => c.hit).map(c => `${c.label} (now: ${c.now})`), notMeasured: e.conditions.filter(c => !c.measured).map(c => c.label) })) } : null,
+    stress: await stressIndex(ctx).then(x => ({ latest: x.latest, level: x.level })).catch(() => null),
     performance: perf.map(r => ({ id: r.id, name: r.name, price: r.price, pct1d: r.pct1d, d7: r.perf['7D'], d30: r.perf['30D'], ytd: r.perf.YTD, vol30: r.vol['30D'], dd1y: r.maxDrawdown1Y, freshness: r.freshness, asOf: r.asOf })),
   };
   const result = { inputs, anomalies: an, regime: reg, patterns: pat, ai: null, news: null };
@@ -65,7 +67,7 @@ export async function intelligence(ctx, { ids, question } = {}) {
     const j = await fetchJSON('https://api.anthropic.com/v1/messages', {
       method: 'POST', timeoutMs: 60000,
       headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: config.keys.ANTHROPIC_MODEL || 'claude-sonnet-5-5', max_tokens: 2500, system: SYSTEM, messages: [{ role: 'user', content: userMsg }] }),
+      body: JSON.stringify({ model: model || config.keys.ANTHROPIC_MODEL || 'claude-sonnet-5-5', max_tokens: 2500, system: SYSTEM, messages: [{ role: 'user', content: userMsg }] }),
     });
     const text = (j.content || []).map(c => c.text || '').join('');
     const m = text.match(/\{[\s\S]*\}/);

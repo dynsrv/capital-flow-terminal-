@@ -13,7 +13,7 @@ const ids = universe.assets.map(a => a.id);
 const CORR_DEFAULT = 'SPX,NDX,SX5E,NKY,EEM,UST10Y,TLT,HYG,BTC,ETH,GOLD,WTI,COPPER,DXY,VIX';
 const REL_DEFAULT = 'SPX,EEM,BTC,GOLD,TLT,DXY';
 const ANCHORS = ['SPX', 'NDX', 'UST10Y', 'DXY', 'BTC', 'GOLD', 'WTI', 'HYOAS', 'EEM', 'COPPER', 'USDJPY', 'VIX'];
-const routes = ['/universe', '/performance', '/overview', '/analytics/regime', '/flows', '/intel/anomalies', '/intel/patterns', '/risk/stress', '/risk/table', '/risk/inflections', '/risk/highlights', '/intel/precrash',
+const routes = ['/universe', '/performance', '/overview', '/analytics/regime', '/flows', '/intel/anomalies', '/intel/patterns', '/risk/stress', '/risk/table', '/risk/inflections', '/risk/highlights', '/intel/precrash', '/intel/reading',
   ...ANCHORS.map(a => `/analytics/leaders?anchor=${a}`),
   ...['7D', '30D', '90D', '1Y', '5Y'].map(w => `/analytics/correlation?window=${w}&ids=${CORR_DEFAULT}`),
   ...['90D', '1Y', '5Y', '10Y'].map(w => `/analytics/relative?window=${w}&ids=${REL_DEFAULT}`),

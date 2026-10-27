@@ -5,6 +5,7 @@
 export const CREDENTIAL_FIELDS = [
   { key: 'ANTHROPIC_API_KEY', label: 'Anthropic API key', group: 'AI', help: 'Enables AI explanations in Intelligence (signal, evidence, cause, impact, confidence, what to watch).', test: true },
   { key: 'ANTHROPIC_MODEL', label: 'Anthropic model', group: 'AI', help: 'Model ID used for explanations. Default: claude-sonnet-5-5.', secret: false, placeholder: 'claude-sonnet-5-5' },
+  { key: 'AI_AUTO_REFRESH', label: 'Automatic AI refresh', group: 'AI', help: 'off: only when you press Refresh. daily: once a day after the US close. on-change: on the daily run, only if the regime, stress band or high-severity anomalies changed since the last reading.', secret: false, placeholder: 'off', options: ['off', 'daily', 'on-change'] },
   { key: 'EXA_API_KEY', label: 'Exa API key', group: 'Search', help: 'News search for AI citations via exa.ai.', test: true },
   { key: 'PARALLEL_API_KEY', label: 'Parallel API key', group: 'Search', help: 'News search for AI citations via parallel.ai.', test: true },
   { key: 'SEARCH_PROVIDER', label: 'Preferred search provider', group: 'Search', help: 'auto (Exa first, Parallel as fallback), exa, or parallel.', secret: false, placeholder: 'auto', options: ['auto', 'exa', 'parallel'] },
