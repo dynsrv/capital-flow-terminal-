@@ -239,7 +239,7 @@ export const RT_TESTS = {
    for visitors, so a socket runs in the browser. 'admin' hands the key only to an unlocked Admin browser;
    'everyone' puts it in the public config (offered only for providers without a one-connection limit). */
 const WS_DEF = {
-  massive: { key: 'WS_MASSIVE', modes: ['off', 'admin'], url: () => 'wss://socket.polygon.io/stocks', stocksOnly: true },
+  massive: { key: 'WS_MASSIVE', modes: ['off', 'admin'], url: () => 'wss://socket.massive.com/stocks', stocksOnly: true },
   alpaca: { key: 'WS_ALPACA', modes: ['off', 'admin'], url: () => 'wss://stream.data.alpaca.markets/v2/iex', stocksOnly: true },
   finnhub: { key: 'WS_FINNHUB', modes: ['off', 'admin', 'everyone'], url: (k) => `wss://ws.finnhub.io?token=${encodeURIComponent(k.FINNHUB_API_KEY)}` },
   twelvedata: { key: 'WS_TWELVEDATA', modes: ['off', 'admin', 'everyone'], url: (k) => `wss://ws.twelvedata.com/v1/quotes/price?apikey=${encodeURIComponent(k.TWELVEDATA_API_KEY)}` },

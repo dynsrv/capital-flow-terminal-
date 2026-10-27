@@ -1116,7 +1116,7 @@
   function openProviderSocket(d, gen, retry = 0) {
     if (gen !== rt.gen || typeof WebSocket === 'undefined') return;
     const bySym = {}; for (const [id, sym] of Object.entries(d.symbols)) bySym[sym] = id;
-    const syms = Object.values(d.symbols); const st = rt.sock[d.provider] = { status: 'connecting', ticks: 0, mode: d.mode, n: syms.length, at: null, note: d.delayed ? 'real-time feed not on plan: using the 15-minute delayed feed' : '' };
+    const syms = Object.values(d.symbols); const st = rt.sock[d.provider] = { status: 'connecting', ticks: 0, mode: d.mode, n: syms.length, at: null, note: d.delayed ? 'real-time feed not on plan: per-second bars from the 15-minute delayed feed' : '' };
     let ws; try { ws = new WebSocket(d.url); } catch (e) { st.status = 'error'; st.note = e.message; return; }
     rt.sockets[d.provider] = ws;
     const tick = (sym, price, ts) => { const id = bySym[sym]; const v = Number(price); if (!id || !isFinite(v) || v <= 0) return; st.ticks++; st.at = Date.now(); st.status = 'live'; applyRt(id, v, { ts: ts ? new Date(ts).toISOString() : new Date().toISOString(), source: d.provider + (d.delayed ? ' ws · 15-min delayed' : ' ws') }); };
@@ -1133,10 +1133,11 @@
       else if (d.provider === 'twelvedata') { if (m.event === 'price') tick(m.symbol, m.price, m.timestamp ? m.timestamp * 1000 : null); else if (m.status === 'error' || m.event === 'subscribe-status' && m.status !== 'ok') { const f = (m.fails || []).map(x => x && x.symbol || x).filter(Boolean); st.note = f.length ? `not on plan: ${f.join(', ')}` : String(m.message || (m.messages || []).join(' ') || ''); } }
       else for (const x of [].concat(m)) {
         if (d.provider === 'massive') {
-          if (x.ev === 'status') { if (x.status === 'auth_success') { st.status = 'subscribed'; send({ action: 'subscribe', params: syms.map(y => 'T.' + y).join(',') }); } else if (/fail|max|error|not/i.test(x.status || '')) {
-              if (!d.delayed && /not authorized/i.test(x.message || '') && /\/\/socket\./.test(d.url)) { delete rt.sockets[d.provider]; try { ws.close(); } catch (e) {} openProviderSocket({ ...d, url: d.url.replace('//socket.', '//delayed.'), delayed: true }, gen); return; }
+          if (x.ev === 'status') { if (x.status === 'auth_success') { st.status = 'subscribed'; send({ action: 'subscribe', params: syms.map(y => (d.delayed ? 'A.' : 'T.') + y).join(',') }); } else if (/fail|max|error|not/i.test(x.status || '')) {
+              if (!d.delayed && /not authorized|real-time/i.test(x.message || '') && /\/\/socket\./.test(d.url)) { delete rt.sockets[d.provider]; try { ws.close(); } catch (e) {} openProviderSocket({ ...d, url: d.url.replace('//socket.', '//delayed.'), delayed: true }, gen); return; }
               st.status = 'error'; st.note = x.message || x.status; } }
           else if (x.ev === 'T') tick(x.sym, x.p, x.t);
+          else if (x.ev === 'A') tick(x.sym, x.c, x.e);
         } else if (d.provider === 'alpaca') {
           if (x.T === 'success' && x.msg === 'connected') send(d.auth);
           else if (x.T === 'success' && x.msg === 'authenticated') { st.status = 'subscribed'; send({ action: 'subscribe', trades: syms }); }
