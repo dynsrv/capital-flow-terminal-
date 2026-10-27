@@ -147,7 +147,7 @@
       return w.charAt(0).toUpperCase() + w.slice(1);
     });
   }
-  const TC_SEL = '.strip-seg span, .comp .l, .nav .lbl, .card-h h3, .page-head h1, .side-h h2, .kpi-top > span, .badge, .pill > span, .btn, .seg button, .chip, .cchip, table.t th, .field > label, .pop-g, .news-day, .news-item .ct, .reading .lab, .finding h4, .finding .row > b, .drawer-h h3, .mini-item .lab, .heat-row .cls, .stat span, .tag, .kv dt, .regime-head .big, .tv-poster b, .legend span, .gauge-l span';
+  const TC_SEL = '.strip-seg span, .comp .l, .nav .lbl, .card-h h3, .page-head h1, .side-h h2, .kpi-top > span:first-child, .badge, .pill > span, .btn, .seg button, .chip, .cchip, table.t th, .field > label, .pop-g, .news-day, .news-item .ct, .reading .lab, .finding h4, .finding .row > b, .drawer-h h3, .mini-item .lab, .heat-row .cls, .stat span, .tag, .kv dt, .regime-head .big, .tv-poster b, .legend span, .gauge-l span';
   function applyTitleCase(root = document) {
     const els = root.querySelectorAll ? root.querySelectorAll(TC_SEL) : [];
     for (const el of els) {
@@ -261,7 +261,7 @@
 
   async function loadCore() {
     const [u, p] = await Promise.all([state.universe ? Promise.resolve(state.universe) : api('/universe'), api('/performance')]);
-    state.universe = u; state.perf = p.rows; state.loadedAt = new Date();
+    state.universe = u; state.perf = p.rows; state.loadedAt = new Date(); reapplyRt();
     renderTicker(); renderHealth();
     $('#updated').textContent = (SNAP && !apiBase ? 'Snapshot ' : 'Updated ') + state.loadedAt.toISOString().slice(11, 16) + 'Z';
     Promise.all([api('/analytics/regime').catch(() => null), api('/risk/stress').catch(() => null)]).then(([r, s]) => setPills(r, s));
@@ -378,7 +378,7 @@
     $$('[data-go]', v).forEach(b => b.onclick = () => show(b.dataset.go));
 
     // KPIs
-    $('#kpis').innerHTML = ['SPX', 'UST10Y', 'DXY', 'BTC', 'GOLD', 'WTI', 'VIX', 'HYOAS'].map(id => { const q = Q[id]; if (!q) return ''; const c1 = isDiff(q) ? q.change : q.pct1d; return `<article class="card kpi" data-id="${id}" tabindex="0"><div class="kpi-top"><span>${esc(q.name.replace(/ \(.*\)/, ''))}</span>${badge(q)}</div><div class="kpi-val">${fmt.px(q.price)}<small>${esc(q.unit)}</small></div><div class="chips"><span><b class="${tone(c1)}">${isDiff(q) ? fmt.bp(c1) : fmt.pct(c1)}</b> 1D</span><span><b class="${tone(q.perf['30D'])}">${fmt.chg(q, q.perf['30D'])}</b> 30D</span><span><b class="${tone(q.perf.YTD)}">${fmt.chg(q, q.perf.YTD)}</b> YTD</span></div>${areaSpark(q.sparkline)}<div class="kpi-foot">${esc(q.source)} · ${fmt.ago(q.asOf)}</div></article>`; }).join('');
+    $('#kpis').innerHTML = ['SPX', 'UST10Y', 'DXY', 'BTC', 'GOLD', 'WTI', 'VIX', 'HYOAS'].map(id => { const q = Q[id]; if (!q) return ''; const c1 = isDiff(q) ? q.change : q.pct1d; return `<article class="card kpi" data-id="${id}" tabindex="0"><div class="kpi-top"><span>${esc(q.name.replace(/ \(.*\)/, ''))}</span>${badge(q)}</div><div class="kpi-val"><span data-rt-px="${id}">${fmt.px(q.price)}</span><small>${esc(q.unit)}</small></div><div class="chips"><span><b class="${tone(c1)}" data-rt-pct="${id}">${isDiff(q) ? fmt.bp(c1) : fmt.pct(c1)}</b> 1D</span><span><b class="${tone(q.perf['30D'])}">${fmt.chg(q, q.perf['30D'])}</b> 30D</span><span><b class="${tone(q.perf.YTD)}">${fmt.chg(q, q.perf.YTD)}</b> YTD</span></div>${areaSpark(q.sparkline)}<div class="kpi-foot" data-rt-foot="${id}">${esc(q.source)} · ${fmt.ago(q.asOf)}</div></article>`; }).join('');
     $('#kpis').onclick = e => { const k = e.target.closest('.kpi'); if (k) openDrawer(k.dataset.id); };
     $('#kpis').onkeydown = e => { if (e.key === 'Enter') { const k = e.target.closest('.kpi'); if (k) openDrawer(k.dataset.id); } };
 
@@ -558,7 +558,7 @@
       const draw = (sel, rows, col) => {
         const n = $(sel); n.style.height = Math.max(200, rows.length * 30 + 40) + 'px';
         if (!rows.length) { n.innerHTML = emptyState('None in this window.'); return; }
-        chart(n, { grid: { left: 8, right: 30, top: 6, bottom: 22, containLabel: true }, tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: ps => { const x = rows[ps[0].dataIndex]; return `<b>${esc(x.name)}</b><br>30 days: ${x.r30.toFixed(2)} (n ${x.n30})<br>1 year: ${x.r1y == null ? '—' : x.r1y.toFixed(2)} (n ${x.n1y})<br><span style="opacity:.7">shift ${(x.r30 - (x.r1y ?? 0) > 0 ? '+' : '')}${(x.r30 - (x.r1y ?? 0)).toFixed(2)}</span>`; } }, xAxis: { type: 'value', min: col === 'up' ? 0 : -1, max: col === 'up' ? 1 : 0, ...axis(T) }, yAxis: { type: 'category', inverse: true, data: rows.map(x => x.id), ...axis(T, { splitLine: { show: false } }), axisLabel: { color: T.fg, fontSize: 11.5, fontFamily: T.mono } }, series: [{ name: '30 days', type: 'bar', barWidth: 12, data: rows.map(x => ({ value: x.r30, itemStyle: { color: col === 'up' ? T.c4 : T.c1, borderRadius: col === 'up' ? [0, 4, 4, 0] : [4, 0, 0, 4] } })), label: { show: true, position: col === 'up' ? 'right' : 'left', color: T.fg2, fontSize: 10.5, formatter: p => p.value.toFixed(2) } }, { name: '1 year', type: 'scatter', symbol: 'diamond', symbolSize: 10, data: rows.map(x => x.r1y), itemStyle: { color: T.fg, borderColor: T.surface, borderWidth: 1.5 }, z: 5 }] });
+        chart(n, { grid: { left: 8, right: 30, top: 6, bottom: 22, containLabel: true }, tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, formatter: ps => { const x = rows[ps[0].dataIndex]; return `<b>${esc(x.name)}</b><br>30 days: ${x.r30.toFixed(2)} (n ${x.n30})<br>1 year: ${x.r1y == null ? '—' : x.r1y.toFixed(2)} (n ${x.n1y})<br><span style="opacity:.7">shift ${(x.r30 - (x.r1y ?? 0) > 0 ? '+' : '')}${(x.r30 - (x.r1y ?? 0)).toFixed(2)}</span>`; } }, xAxis: { type: 'value', min: col === 'up' ? 0 : -1.2, max: col === 'up' ? 1.2 : 0, interval: 0.2, ...axis(T, { axisLabel: { color: T.fg3, fontSize: 10.5, formatter: v => Math.abs(v) > 1.0001 ? '' : (Math.round(v * 10) / 10).toString() } }) }, yAxis: { type: 'category', inverse: true, data: rows.map(x => x.id), ...axis(T, { splitLine: { show: false } }), axisLabel: { color: T.fg, fontSize: 11.5, fontFamily: T.mono } }, series: [{ name: '30 days', type: 'bar', barWidth: 12, data: rows.map(x => ({ value: x.r30, itemStyle: { color: col === 'up' ? T.c4 : T.c1, borderRadius: col === 'up' ? [0, 4, 4, 0] : [4, 0, 0, 4] } })), label: { show: true, position: col === 'up' ? 'right' : 'left', color: T.fg2, fontSize: 10.5, formatter: p => p.value.toFixed(2) } }, { name: '1 year', type: 'scatter', symbol: 'diamond', symbolSize: 10, data: rows.map(x => x.r1y), itemStyle: { color: T.fg, borderColor: T.surface, borderWidth: 1.5 }, z: 5 }] });
       };
       draw('#lead-pos', pos, 'up'); draw('#lead-neg', neg, 'down');
       const shifts = r.rows.filter(x => x.r1y != null).map(x => ({ ...x, d: x.r30 - x.r1y })).sort((p, q) => Math.abs(q.d) - Math.abs(p.d)).slice(0, 3);
@@ -769,6 +769,7 @@
       ${card({ icon: 'key', title: 'API credentials', sub: 'Stored server-side; values are never shown in full', body: `<div class="form-row"><label for="adm-token">Admin token</label><div class="inline"><input type="password" id="adm-token" value="${esc(a.token)}" placeholder="ADMIN_TOKEN" autocomplete="off"><button class="btn" id="adm-unlock">Unlock</button></div><div class="help">Kept in this browser tab only.</div></div><div id="adm-fields"></div>` })}
       <div style="display:flex;flex-direction:column;gap:var(--gap);min-width:0">
         ${card({ icon: 'intel', title: 'AI reading', sub: 'Generate or schedule the market reading shown on the Intelligence page', body: '<div id="adm-ai"><p class="dim">Unlock to manage.</p></div>' })}
+        ${card({ icon: 'pulse', title: 'Real-time data', sub: 'Optional live prices: switch on and add keys in the Real-time group of the credentials panel', body: '<div id="adm-rt"><p class="dim">Unlock to view.</p></div>' })}
         ${card({ icon: 'news', title: 'News curation', sub: 'Optional: let a model rank and annotate the sidebar headlines', body: '<div id="adm-news"><p class="dim">Unlock to manage.</p></div>' })}
         ${card({ icon: 'tv', title: 'Live TV channels', sub: 'YouTube channels offered in the sidebar player', body: '<div id="adm-tv"><p class="dim">Unlock to edit.</p></div>' })}
         ${card({ icon: 'db', title: 'Storage & cache', body: '<div id="adm-status"><p class="dim">Unlock to view.</p></div>' })}
@@ -780,7 +781,7 @@
       try {
         const [k, st, sz] = await Promise.all([api('/admin/keys', { headers: hdr() }), api('/admin/status', { headers: hdr() }), api('/admin/sizes', { headers: hdr() })]);
         const groups = {}; k.fields.forEach(f => (groups[f.group] ||= []).push(f));
-        const gIcon = { AI: 'intel', Search: 'search', Data: 'db' };
+        const gIcon = { AI: 'intel', Search: 'search', Data: 'db', 'Real-time': 'pulse' };
         $('#adm-fields').innerHTML = Object.entries(groups).map(([g, fs]) => `<div class="nav-label" style="padding:18px 0 4px;display:flex;align-items:center;gap:6px">${ic(gIcon[g] || 'key')}${esc(g)}</div>` + fs.map(f => {
           const status = f.configured ? `<span class="badge measured">${f.secret === false ? esc(f.value) : 'set'}${f.fromEnv ? ' · env' : ''}</span>` : '<span class="badge">not set</span>';
           const input = f.options ? `<select id="k-${f.key}" data-key="${f.key}"><option value="">${esc(f.value ? 'Keep: ' + f.value : 'Default: ' + (f.placeholder || ''))}</option>${f.options.map(o => `<option value="${o}">${o}</option>`).join('')}</select>` : `<input id="k-${f.key}" type="${f.secret === false ? 'text' : 'password'}" data-key="${f.key}" placeholder="${esc(f.secret === false ? (f.value || f.placeholder || '') : (f.value || 'Paste key'))}" autocomplete="off">`;
@@ -794,7 +795,7 @@
           catch (err) { out.className = 'test-out bad'; out.innerHTML = `${ic('alert')}<span>${esc(err.message)}</span>`; }
           finally { b.disabled = false; }
         };
-        $('#adm-save').onclick = async () => { const upd = {}; $$('#adm-fields [data-key]').forEach(i => { if (i.value) upd[i.dataset.key] = i.value === 'clear' ? '' : i.value; }); if (!Object.keys(upd).length) return toast('Nothing to save'); try { await api('/admin/keys', { method: 'POST', headers: hdr(), body: JSON.stringify(upd) }); toast('Credentials saved'); unlock(); } catch (e) { toast(e.message); } };
+        $('#adm-save').onclick = async () => { const upd = {}; $$('#adm-fields [data-key]').forEach(i => { if (i.value) upd[i.dataset.key] = i.value === 'clear' ? '' : i.value; }); if (!Object.keys(upd).length) return toast('Nothing to save'); try { await api('/admin/keys', { method: 'POST', headers: hdr(), body: JSON.stringify(upd) }); toast('Credentials saved'); unlock(); startRt(); } catch (e) { toast(e.message); } };
         try {
           const rd = await api('/intel/reading'); const cur = rd.reading;
           $('#adm-ai').innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
@@ -808,7 +809,7 @@
           $('#adm-ai-run').onclick = async (e) => { const b = e.currentTarget; b.disabled = true; const old = b.innerHTML; b.innerHTML = `<span class="spin" style="width:12px;height:12px"></span>Refreshing…`; try { const r = await api('/admin/ai-refresh', { method: 'POST', headers: hdr(), body: JSON.stringify({ model: $('#adm-ai-model').value || undefined, question: $('#adm-ai-q').value || undefined }) }); toast(`Reading refreshed with ${r.reading.model}`); unlock(); } catch (err) { toast(err.message); b.disabled = false; b.innerHTML = old; } };
           $$('#adm-ai [data-go]').forEach(x => x.onclick = () => show(x.dataset.go));
         } catch (e) { $('#adm-ai').innerHTML = errorBox(e.message); }
-        renderAdminNews(hdr); renderAdminTv(hdr); renderAdminStore(hdr);
+        renderAdminNews(hdr); renderAdminTv(hdr); renderAdminStore(hdr); renderAdminRealtime(hdr);
         $('#adm-status').innerHTML = `<div class="tbl"><table class="t"><thead><tr><th>Source</th><th class="num">OK</th><th class="num">Failed</th><th class="num">Stale</th></tr></thead><tbody>${Object.entries(st.bySource).map(([s, x]) => `<tr><td><span style="display:inline-flex;gap:8px;align-items:center"><i class="dot ${x.failed ? 'bad' : 'ok'}"></i>${esc(s)}</span>${x.errors.length ? `<div class="xs muted">${x.errors.map(esc).join('<br>')}</div>` : ''}</td><td class="num up">${x.ok}</td><td class="num ${x.failed ? 'down' : 'muted'}">${x.failed}</td><td class="num ${x.stale ? 'down' : 'muted'}">${x.stale}</td></tr>`).join('')}</tbody></table></div><div id="adm-store" style="margin:10px 0"></div><button class="btn ghost" id="adm-clear">${ic('refresh')}Clear cache</button>`;
         $('#adm-clear').onclick = async () => { try { const r = await api('/admin/cache/clear', { method: 'POST', headers: hdr() }); toast(`Cleared ${r.cleared} cache entries`); } catch (e) { toast(e.message); } };
         $('#adm-sizes').innerHTML = sz.references.filter(r => r.id !== 'CRYPTO_TOTAL').map(r => `<div class="form-row"><label>${esc(r.label)} <span class="xs muted">${esc(r.measure.replace(/_/g, ' '))}</span></label><div class="inline"><input type="number" data-sz="${r.id}" data-f="${r.tonnes ? 'tonnes' : 'usd'}" placeholder="${r.tonnes ? r.tonnes + ' tonnes' : (r.usd / 1e12).toFixed(1) + ' $T'}" value="${r.override ? (r.override.tonnes || r.override.usd / 1e12) : ''}" aria-label="${esc(r.label)} value"><input type="text" data-szs="${r.id}" placeholder="${esc(r.source)}" value="${esc(r.override?.source || '')}" aria-label="Source"><input type="text" data-sza="${r.id}" placeholder="${esc(r.asOf)}" value="${esc(r.override?.asOf || '')}" aria-label="As of" style="flex:0 1 90px"></div></div>`).join('') + `<div class="row-actions" style="margin-top:12px"><button class="btn" id="adm-size-save">Save reference data</button></div>`;
@@ -858,6 +859,86 @@
     } catch (e) { box.innerHTML = errorBox(e.message); }
   }
 
+  /* ═════════════════════ REAL-TIME (optional; admin switches it on) ═════════════════════
+     Keyed providers are polled through /api/rt/quotes (keys stay on the server, one upstream call per interval for all
+     visitors). Crypto streams tick-by-tick from Coinbase's public WebSocket. Every updated value is relabelled with its
+     provider and timestamp; instruments without a real-time source keep their normal badge. */
+  const rt = { cfg: null, timer: null, ws: null, prev: {}, vals: {}, dirs: {}, painted: 0, queued: false, monAt: 0, wsRetry: 0, count: 0 };
+  function applyRt(id, price, o = {}) {
+    const r = state.perf.find(x => x.id === id); if (!r || price == null || !isFinite(price)) return;
+    if (rt.prev[id] == null) rt.prev[id] = o.prevClose ?? (r.price != null && r.pct1d != null ? r.price / (1 + r.pct1d / 100) : null);
+    const pc = o.prevClose ?? rt.prev[id]; const old = r.price;
+    r.price = price; if (pc) { r.pct1d = (price / pc - 1) * 100; r.change = price - pc; }
+    r.freshness = o.delayed ? 'delayed' : 'realtime'; r.source = o.source; r.asOf = o.ts || new Date().toISOString(); r.stale = false; r.error = null; r.available = true;
+    if (old != null && price !== old) rt.dirs[id] = price > old ? 'up' : 'down';
+    rt.vals[id] = { price, o };
+    paintRt();
+  }
+  const reapplyRt = () => { for (const [id, v] of Object.entries(rt.vals)) applyRt(id, v.price, v.o); };
+  function paintRt() {
+    if (rt.queued) return; rt.queued = true;
+    const wait = Math.max(0, 900 - (Date.now() - rt.painted));
+    setTimeout(() => requestAnimationFrame(() => {
+      rt.queued = false; rt.painted = Date.now();
+      renderTicker();
+      for (const [id, dir] of Object.entries(rt.dirs)) {
+        const r = state.perf.find(x => x.id === id); if (!r) continue;
+        const px = $(`[data-rt-px="${id}"]`); if (px) { px.textContent = fmt.px(r.price); px.classList.remove('tick-up', 'tick-down'); void px.offsetWidth; px.classList.add('tick-' + dir); }
+        const pc = $(`[data-rt-pct="${id}"]`); if (pc) { const c = isDiff(r) ? r.change : r.pct1d; pc.textContent = isDiff(r) ? fmt.bp(c) : fmt.pct(c); pc.className = tone(c); }
+        const ft = $(`[data-rt-foot="${id}"]`); if (ft) ft.textContent = `${r.source} · ${fmt.ago(r.asOf)}`;
+        const card = $(`.kpi[data-id="${id}"] .badge`); if (card) card.outerHTML = badge(r);
+      }
+      rt.dirs = {};
+      if (state.view === 'monitor' && Date.now() - rt.monAt > 3000) { rt.monAt = Date.now(); drawMonTable(); }
+      const n = Object.keys(rt.vals).length; $('#updated').textContent = n ? `Real-time · ${n} live` : $('#updated').textContent;
+    }), wait);
+  }
+  async function pollRt() {
+    if (document.hidden) return;
+    try { const r = await api('/rt/quotes'); if (!r.enabled) return stopRt(); r.quotes.forEach(q => applyRt(q.id, q.price, { prevClose: q.prevClose, ts: q.ts, source: q.source, delayed: q.delayed })); } catch (e) { /* keep last values; next tick retries */ }
+  }
+  function openStream(cfg) {
+    const ids = Object.entries(cfg.products || {}); if (!ids.length || typeof WebSocket === 'undefined') return;
+    const byProduct = Object.fromEntries(ids.map(([id, p]) => [p, id]));
+    let ws; try { ws = new WebSocket(cfg.url); } catch (e) { return; }
+    rt.ws = ws;
+    ws.onopen = () => { rt.wsRetry = 0; ws.send(JSON.stringify({ type: 'subscribe', product_ids: ids.map(([, p]) => p), channels: ['ticker'] })); };
+    ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch (e) { return; } if (m.type !== 'ticker' || !byProduct[m.product_id]) return; applyRt(byProduct[m.product_id], Number(m.price), { prevClose: Number(m.open_24h) || null, ts: m.time, source: 'coinbase' }); };
+    ws.onclose = () => { if (rt.ws !== ws) return; rt.ws = null; const d = Math.min(60000, 2000 * 2 ** rt.wsRetry++); setTimeout(() => { if (rt.cfg && rt.cfg.enabled && !rt.ws) openStream(cfg); }, d); };
+    ws.onerror = () => { try { ws.close(); } catch (e) {} };
+  }
+  function stopRt() { clearInterval(rt.timer); rt.timer = null; if (rt.ws) { const w = rt.ws; rt.ws = null; try { w.close(); } catch (e) {} } rt.vals = {}; document.body.classList.remove('rt-on'); }
+  async function startRt() {
+    if (SNAP && !apiBase) return; // the embedded snapshot never streams
+    try { rt.cfg = await api('/rt/config'); } catch (e) { return; }
+    stopRt(); if (!rt.cfg.enabled) return;
+    document.body.classList.add('rt-on');
+    if (rt.cfg.polled.length) { pollRt(); rt.timer = setInterval(pollRt, rt.cfg.intervalSec * 1000); }
+    if (rt.cfg.stream) openStream(rt.cfg.stream);
+  }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && rt.timer) pollRt(); });
+
+  async function renderAdminRealtime(hdr) {
+    const box = $('#adm-rt'); if (!box) return;
+    try {
+      const r = await api('/admin/realtime', { headers: hdr() }); const st = r.settings;
+      const SHORT = { massive: 'Massive', alpaca: 'Alpaca', finnhub: 'Finnhub', twelvedata: 'Twelve Data', coinbase: 'Coinbase' }; const pname = (p) => SHORT[p] || p || '';
+      const probe = r.probe ? Object.entries(r.probe.providers || {}) : [];
+      const live = new Map(((r.probe && r.probe.quotes) || []).map(q => [q.id, q]));
+      box.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
+        <div class="kv"><dt>Status</dt><dd class="${st.enabled ? 'up' : 'muted'}">${st.enabled ? 'on' : 'off'}</dd><dt>Interval</dt><dd>${st.intervalSec} s</dd><dt>Crypto stream</dt><dd>${esc(st.crypto)}</dd>${probe.map(([p, x]) => `<dt>${esc(x.name)}</dt><dd class="${x.ok ? 'up' : 'down'}">${x.ok ? `ok · every ${x.ttl} s` : esc(String(x.error || 'error').slice(0, 80))}</dd>`).join('')}</div>
+        <div class="tbl"><table class="t"><thead><tr><th>Instrument</th><th>Real-time source</th><th class="num">Now</th></tr></thead><tbody>${r.coverage.map(c => { const q = live.get(c.id); return `<tr><td class="mono">${c.id}</td><td class="${c.provider ? '' : 'muted'}" style="white-space:normal">${c.provider ? esc(pname(c.provider)) + (c.provider === 'coinbase' ? ' <span class="xs muted">(stream)</span>' : '') : `<span class="xs">needs ${esc(c.options.filter(o => o !== 'coinbase').map(pname).join(' / '))}</span>`}</td><td class="num">${q ? fmt.px(q.price) + (q.delayed ? ' <span class="badge delayed">delayed</span>' : '') : c.provider === 'coinbase' && st.enabled ? '<span class="xs muted">browser</span>' : '—'}</td></tr>`; }).join('')}</tbody></table></div>
+        <p class="xs muted">Everything else (non-US indices, yields, spreads, oil, copper, grains, macro) keeps its standard source: affordable real-time feeds for those are not available, and they are labelled delayed or end-of-day as before.</p>
+        <details><summary class="sm dim" style="cursor:pointer">Provider guide and prices</summary><div class="tbl" style="margin-top:8px"><table class="t"><thead><tr><th>Provider</th><th>Covers here</th><th>Cost</th></tr></thead><tbody>
+          <tr><td>Coinbase public WebSocket</td><td>BTC, ETH, SOL (tick-by-tick)</td><td>Free, no key</td></tr>
+          <tr><td>Alpaca Basic</td><td>US ETFs (IEX venue only)</td><td>Free · Algo Trader Plus $99/mo for all US exchanges</td></tr>
+          <tr><td>Finnhub Free</td><td>US ETFs</td><td>Free, ~60 calls/min, personal use</td></tr>
+          <tr><td>Twelve Data</td><td>FX, gold, silver, crypto, ETFs</td><td>Free 8 credits/min (non-display) · Grow from $29/mo</td></tr>
+          <tr><td>Massive (Polygon.io)</td><td>S&amp;P 500, Nasdaq 100, Russell 2000, VIX, ETFs, FX, metals, crypto</td><td>~$79/mo per asset class for real-time (Developer); lower tiers 15-min delayed</td></tr>
+        </tbody></table></div><p class="xs muted" style="margin-top:6px">Prices as published by each provider in 2026; check their sites before subscribing. Displaying data publicly may need a display licence on paid plans.</p></details></div>`;
+    } catch (e) { box.innerHTML = errorBox(e.message); }
+  }
+
   /* ═════════════════════ navigation & boot ═════════════════════ */
   const renderers = { overview: renderOverview, monitor: renderMonitor, flows: renderFlows, analytics: renderAnalytics, risk: renderRisk, intel: renderIntel, shock: renderShock, admin: renderAdmin };
   async function show(view) {
@@ -887,7 +968,7 @@
   (async () => {
     try { await loadCore(); } catch (e) { $('#ticker-inner').innerHTML = `<span class="down">Quotes unavailable: ${esc(e.message)}</span>`; $('#view-overview').innerHTML = errorBox(`The API could not be reached (${e.message}). Check that the server is running and can reach the data sources.`); return; }
     show(location.hash.slice(1) || 'overview');
-    loadNews(); loadTv();
+    loadNews(); loadTv(); startRt();
     setInterval(() => { if (!(SNAP && !apiBase)) loadNews(); }, 10 * 60000);
     setInterval(async () => { if (SNAP && !apiBase) return; try { await loadCore(); if (state.view === 'monitor') drawMonTable(); } catch (e) {} }, 60000);
   })();

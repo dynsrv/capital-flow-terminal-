@@ -13,7 +13,15 @@ export const CREDENTIAL_FIELDS = [
   { key: 'FRED_API_KEY', label: 'FRED API key', group: 'Data', help: 'Optional. Without it the keyless FRED CSV export is used (same data, lower rate limit).', test: true },
   { key: 'EIA_API_KEY', label: 'EIA API key', group: 'Data', help: 'Optional. Adds official EIA spot prices for WTI, Brent and Henry Hub.', test: true },
   { key: 'COINGECKO_API_KEY', label: 'CoinGecko API key', group: 'Data', help: 'Optional. Raises crypto rate limits and unlocks history beyond 365 days.', test: true },
-  { key: 'MARKET_DATA_API_KEY', label: 'Market data key (Massive / Polygon)', group: 'Data', help: 'Optional. Reserved for a licensed real-time equities feed.', test: true },
+  { key: 'REALTIME_MODE', label: 'Real-time updates', group: 'Real-time', help: 'off: quotes refresh every 60 s from the standard (delayed / end-of-day) sources. on: instruments a configured provider can price in real time update at the interval below, and crypto streams live.', secret: false, placeholder: 'off', options: ['off', 'on'] },
+  { key: 'REALTIME_INTERVAL', label: 'Update interval (seconds)', group: 'Real-time', help: 'How often real-time prices are pulled from keyed providers. All visitors share one upstream request per interval.', secret: false, placeholder: '10', options: ['5', '10', '15', '30', '60'] },
+  { key: 'REALTIME_CRYPTO', label: 'Crypto stream', group: 'Real-time', help: 'coinbase: BTC, ETH and SOL stream tick-by-tick from Coinbase’s public WebSocket (free, no key). off: crypto uses the polled providers or CoinGecko.', secret: false, placeholder: 'coinbase', options: ['coinbase', 'off'] },
+  { key: 'MASSIVE_API_KEY', label: 'Massive (Polygon.io) API key', group: 'Real-time', help: 'US indices (S&P 500, Nasdaq 100, Russell 2000, VIX), US ETFs, FX, gold, silver and crypto in one call. Real-time needs the Developer tier per asset class (about $79/mo); lower tiers are 15-minute delayed and are labelled so.', test: true },
+  { key: 'ALPACA_KEY_ID', label: 'Alpaca key ID', group: 'Real-time', help: 'Free Basic plan gives real-time US ETF prices from the IEX venue. Enter the key ID and secret, save, then test.', test: true },
+  { key: 'ALPACA_SECRET_KEY', label: 'Alpaca secret key', group: 'Real-time', help: 'Secret paired with the key ID above.' },
+  { key: 'FINNHUB_API_KEY', label: 'Finnhub API key', group: 'Real-time', help: 'Free plan: real-time US ETF quotes, about 60 calls/min, personal non-commercial use.', test: true },
+  { key: 'TWELVEDATA_API_KEY', label: 'Twelve Data API key', group: 'Real-time', help: 'FX (EUR, JPY, GBP, CNY, IDR), gold, silver and crypto. Free tier: 8 credits/min and internal non-display use only; Grow ($29/mo) or above for a displayed dashboard.', test: true },
+  { key: 'TWELVEDATA_CREDITS', label: 'Twelve Data credits per minute', group: 'Real-time', help: 'Your plan’s per-minute credit allowance. The update interval for Twelve Data is stretched so it never exceeds it (free = 8, Grow = 55+).', secret: false, placeholder: '8', options: ['8', '55', '144', '377', '610'] },
 ];
 
 const ADMIN_DOC = 'admin/keys';
@@ -49,7 +57,7 @@ export async function getConfig(env) {
       history: Number(env.TTL_HISTORY || 900),
       macro: Number(env.TTL_MACRO || 3600),
     },
-    keys: (() => { const k = Object.fromEntries(CREDENTIAL_FIELDS.map(f => [f.key, get(f.key)])); if (legacy) { if (legacyProv === 'parallel' && !k.PARALLEL_API_KEY) k.PARALLEL_API_KEY = legacy; else if (!k.EXA_API_KEY) k.EXA_API_KEY = legacy; } return k; })(),
+    keys: (() => { const k = Object.fromEntries(CREDENTIAL_FIELDS.map(f => [f.key, get(f.key)])); if (!k.MASSIVE_API_KEY && k.MARKET_DATA_API_KEY) k.MASSIVE_API_KEY = k.MARKET_DATA_API_KEY; if (legacy) { if (legacyProv === 'parallel' && !k.PARALLEL_API_KEY) k.PARALLEL_API_KEY = legacy; else if (!k.EXA_API_KEY) k.EXA_API_KEY = legacy; } return k; })(),
     adminConfigured: Boolean(env.ADMIN_TOKEN),
   };
 }
