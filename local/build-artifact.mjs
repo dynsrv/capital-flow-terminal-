@@ -46,7 +46,7 @@ const bodyInner = html.split('<body>')[1].split('</body>')[0]
   .replace('<div id="snapshot-banner"', '<div id="snapshot-banner"');
 const out = `<title>Capital Flow Terminal</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>${css}</style>
 <script>try { document.documentElement.dataset.theme = localStorage.getItem('cft:theme') || 'dark'; } catch (e) { document.documentElement.dataset.theme = 'dark'; }</script>
 <script>${fs.readFileSync(path.join(ROOT, 'public/vendor/echarts.min.js'), 'utf8')}</script>

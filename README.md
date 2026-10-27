@@ -22,6 +22,23 @@ number carries its source, freshness and as-of time, and failed sources are show
 | Persistent store | ✅ | Everything collected is kept: daily price histories (`hist/*`), a daily snapshot of performance/regime/stress/anomalies (`snap/YYYY-MM-DD`), AI readings (+ archive), curated news, channel list and AES-GCM-encrypted admin credentials. Backends: Vercel Blob → Cloudflare KV → local file → memory |
 | Admin | ✅ | Token-protected page: API keys with Test buttons, AI reading refresh with model choice, news curation, TV channel editor, store status + "store collected data now", market-size overrides, per-source status, clear cache |
 
+## Real-time option (off by default)
+
+Admin → credentials → **Real-time** group. Switch *Real-time updates* to `on`, choose an interval, and add any of:
+
+| Provider | Covers in this app | Cost (2026) | Path |
+|---|---|---|---|
+| Coinbase Exchange public WebSocket | BTC, ETH, SOL tick-by-tick | Free, no key | Browser connects directly |
+| Alpaca Basic | US ETFs (EEM, TLT, LQD, HYG, EMB, DBA), IEX venue only | Free (Algo Trader Plus $99/mo = all US exchanges) | Server-proxied |
+| Finnhub Free | Same US ETFs | Free, ~60 calls/min, personal use | Server-proxied |
+| Twelve Data | EUR, JPY, GBP, CNY, IDR, gold, silver, crypto, ETFs | Free 8 credits/min (non-display); Grow from $29/mo | Server-proxied, interval stretched to the credit budget |
+| Massive (Polygon.io) | S&P 500, Nasdaq 100, Russell 2000, VIX, ETFs, FX, metals, crypto | ~$79/mo per asset class for real-time (Developer); lower tiers are 15-min delayed and labelled so | Server-proxied, one call |
+
+Keys never reach the browser: `/api/rt/quotes` polls the configured providers at the interval and caches the result at the
+edge for that long, so all visitors share one upstream call per interval. Each updated price is relabelled `live` with its
+provider and timestamp. Index levels only come from a provider that publishes the index (no ETF proxies). Non-US indices,
+yields, spreads, oil, copper, grains and macro series keep their standard (delayed / end-of-day) sources.
+
 ## Data sources
 
 | Source | Key | Used for | Freshness |

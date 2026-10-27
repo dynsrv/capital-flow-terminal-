@@ -2,6 +2,7 @@
 // and reports pass/fail, latency and a short human-readable message. Keys are never echoed back.
 import { fetchText } from './lib/util.js';
 import { exaSearch, parallelSearch } from './ai.js';
+import { RT_TESTS } from './realtime.js';
 
 async function timed(fn) {
   const t = Date.now();
@@ -38,6 +39,8 @@ export const TESTS = {
   },
   async MARKET_DATA_API_KEY(key) { return timed(async () => { const j = await json(`https://api.polygon.io/v3/reference/tickers?ticker=SPY&limit=1&apiKey=${encodeURIComponent(key)}`); return `Key accepted. Reference lookup returned ${(j.results || []).length} ticker.`; }); },
 };
+
+for (const [k, fn] of Object.entries(RT_TESTS)) TESTS[k] = (key, keys) => timed(() => fn(key, keys));
 
 export async function testCredential(name, value, config) {
   const fn = TESTS[name];
