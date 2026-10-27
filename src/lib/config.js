@@ -3,13 +3,15 @@
 // Admin values are stored in KV only; they are never written into logs or responses in full.
 
 export const CREDENTIAL_FIELDS = [
-  { key: 'ANTHROPIC_API_KEY', label: 'Anthropic API key', group: 'AI', help: 'Enables AI Market Intelligence explanations (Signal → Evidence → Cause → Impact).' },
-  { key: 'SEARCH_API_KEY', label: 'Web search API key (Exa or Parallel)', group: 'Search', help: 'Lets the AI module cite recent news as evidence. Set SEARCH_PROVIDER to exa or parallel.' },
-  { key: 'SEARCH_PROVIDER', label: 'Search provider (exa | parallel)', group: 'Search', help: 'Which search API the key above belongs to.', secret: false },
-  { key: 'FRED_API_KEY', label: 'FRED API key', group: 'Data', help: 'Optional. Without it the keyless fredgraph CSV endpoint is used (same data, lower rate limit).' },
-  { key: 'EIA_API_KEY', label: 'EIA API key', group: 'Data', help: 'Optional. Adds EIA official spot prices for WTI, Brent and Henry Hub.' },
-  { key: 'COINGECKO_API_KEY', label: 'CoinGecko demo/pro API key', group: 'Data', help: 'Optional. Raises crypto rate limits and unlocks >365d history.' },
-  { key: 'MARKET_DATA_API_KEY', label: 'Market data provider key (Massive / Polygon-compatible)', group: 'Data', help: 'Optional. Reserved for a licensed real-time equities feed.' },
+  { key: 'ANTHROPIC_API_KEY', label: 'Anthropic API key', group: 'AI', help: 'Enables AI explanations in Intelligence (signal, evidence, cause, impact, confidence, what to watch).', test: true },
+  { key: 'ANTHROPIC_MODEL', label: 'Anthropic model', group: 'AI', help: 'Model ID used for explanations. Default: claude-sonnet-5-5.', secret: false, placeholder: 'claude-sonnet-5-5' },
+  { key: 'EXA_API_KEY', label: 'Exa API key', group: 'Search', help: 'News search for AI citations via exa.ai.', test: true },
+  { key: 'PARALLEL_API_KEY', label: 'Parallel API key', group: 'Search', help: 'News search for AI citations via parallel.ai.', test: true },
+  { key: 'SEARCH_PROVIDER', label: 'Preferred search provider', group: 'Search', help: 'auto (Exa first, Parallel as fallback), exa, or parallel.', secret: false, placeholder: 'auto', options: ['auto', 'exa', 'parallel'] },
+  { key: 'FRED_API_KEY', label: 'FRED API key', group: 'Data', help: 'Optional. Without it the keyless FRED CSV export is used (same data, lower rate limit).', test: true },
+  { key: 'EIA_API_KEY', label: 'EIA API key', group: 'Data', help: 'Optional. Adds official EIA spot prices for WTI, Brent and Henry Hub.', test: true },
+  { key: 'COINGECKO_API_KEY', label: 'CoinGecko API key', group: 'Data', help: 'Optional. Raises crypto rate limits and unlocks history beyond 365 days.', test: true },
+  { key: 'MARKET_DATA_API_KEY', label: 'Market data key (Massive / Polygon)', group: 'Data', help: 'Optional. Reserved for a licensed real-time equities feed.', test: true },
 ];
 
 export async function loadAdminKeys(env) {
@@ -31,6 +33,9 @@ export async function saveAdminKeys(env, updates) {
 export async function getConfig(env) {
   const admin = await loadAdminKeys(env);
   const get = (k) => admin[k] || env[k] || '';
+  // legacy single search key → provider-specific slot
+  const legacy = admin.SEARCH_API_KEY || env.SEARCH_API_KEY || '';
+  const legacyProv = (admin.SEARCH_PROVIDER || env.SEARCH_PROVIDER || 'exa').toLowerCase();
   return {
     appName: env.APP_NAME || 'Capital Flow Terminal',
     demoMode: String(env.DEMO_MODE || '').toLowerCase() === 'true',
@@ -39,7 +44,7 @@ export async function getConfig(env) {
       history: Number(env.TTL_HISTORY || 900),
       macro: Number(env.TTL_MACRO || 3600),
     },
-    keys: Object.fromEntries(CREDENTIAL_FIELDS.map(f => [f.key, get(f.key)])),
+    keys: (() => { const k = Object.fromEntries(CREDENTIAL_FIELDS.map(f => [f.key, get(f.key)])); if (legacy) { if (legacyProv === 'parallel' && !k.PARALLEL_API_KEY) k.PARALLEL_API_KEY = legacy; else if (!k.EXA_API_KEY) k.EXA_API_KEY = legacy; } return k; })(),
     adminConfigured: Boolean(env.ADMIN_TOKEN),
   };
 }

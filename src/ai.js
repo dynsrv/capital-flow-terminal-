@@ -15,17 +15,26 @@ Rules:
 - Confidence: Low / Medium / High with one-line justification.
 Return strict JSON: {"findings":[{"signal":"","evidence":["..."],"possibleCause":"","crossAssetImpact":"","confidence":"Low|Medium|High","confidenceWhy":"","whatToWatch":["..."],"classification":{"verifiedFacts":["..."],"historicalRelationships":["..."],"hypotheses":["..."],"scenarios":["..."]},"citations":[1,2]}],"overview":"2-3 sentence summary of what is changing and why it matters"}`;
 
+export async function exaSearch(key, query, n = 6) {
+  const j = await fetchJSON('https://api.exa.ai/search', { method: 'POST', timeoutMs: 20000, headers: { 'x-api-key': key, 'content-type': 'application/json' }, body: JSON.stringify({ query, numResults: n, type: 'auto', contents: { highlights: true }, startPublishedDate: new Date(Date.now() - 7 * 86400e3).toISOString() }) });
+  return (j.results || []).map((r, i) => ({ n: i + 1, title: r.title, url: r.url, snippet: (r.highlights || []).join(' ').slice(0, 600), published: r.publishedDate || null, provider: 'exa' }));
+}
+export async function parallelSearch(key, query, n = 6) {
+  const j = await fetchJSON('https://api.parallel.ai/v1/search', { method: 'POST', timeoutMs: 25000, headers: { 'x-api-key': key, 'content-type': 'application/json' }, body: JSON.stringify({ objective: query, search_queries: [query], mode: 'fast', advanced_settings: { max_results: n } }) });
+  return (j.results || []).slice(0, n).map((r, i) => ({ n: i + 1, title: r.title, url: r.url, snippet: (r.excerpts || []).join(' ').slice(0, 600), published: r.publish_date || null, provider: 'parallel' }));
+}
+
 async function searchNews(config, query) {
-  const key = config.keys.SEARCH_API_KEY; const provider = (config.keys.SEARCH_PROVIDER || 'exa').toLowerCase();
-  if (!key) return { items: [], note: 'No search key configured; evidence is price/volatility-based only.' };
-  try {
-    if (provider === 'parallel') {
-      const j = await fetchJSON('https://api.parallel.ai/v1beta/search', { headers: { 'x-api-key': key, 'content-type': 'application/json' }, method: 'POST', body: JSON.stringify({ objective: query, search_queries: [query], max_results: 6, max_chars_per_result: 600 }) });
-      return { items: (j.results || []).map((r, i) => ({ n: i + 1, title: r.title, url: r.url, snippet: (r.excerpts || []).join(' ').slice(0, 600), published: r.published_date || null })) };
-    }
-    const j = await fetchJSON('https://api.exa.ai/search', { headers: { 'x-api-key': key, 'content-type': 'application/json' }, method: 'POST', body: JSON.stringify({ query, numResults: 6, type: 'auto', contents: { highlights: { maxCharacters: 600 } }, startPublishedDate: new Date(Date.now() - 7 * 86400e3).toISOString() }) });
-    return { items: (j.results || []).map((r, i) => ({ n: i + 1, title: r.title, url: r.url, snippet: (r.highlights || []).join(' ').slice(0, 600), published: r.publishedDate || null })) };
-  } catch (e) { return { items: [], note: `Search failed: ${e.message}` }; }
+  const k = config.keys; const pref = (k.SEARCH_PROVIDER || 'auto').toLowerCase();
+  const order = pref === 'parallel' ? ['parallel', 'exa'] : ['exa', 'parallel'];
+  const avail = order.filter(p => (p === 'exa' ? k.EXA_API_KEY : k.PARALLEL_API_KEY));
+  if (!avail.length) return { items: [], note: 'No search key configured; evidence is price and volatility data only.' };
+  const errors = [];
+  for (const p of (pref === 'auto' ? avail : avail.slice(0, 1))) {
+    try { const items = p === 'exa' ? await exaSearch(k.EXA_API_KEY, query) : await parallelSearch(k.PARALLEL_API_KEY, query); return { items, provider: p }; }
+    catch (e) { errors.push(`${p}: ${e.message}`); }
+  }
+  return { items: [], note: `Search failed (${errors.join('; ')})` };
 }
 
 export async function intelligence(ctx, { ids, question } = {}) {
@@ -54,7 +63,7 @@ export async function intelligence(ctx, { ids, question } = {}) {
     const j = await fetchJSON('https://api.anthropic.com/v1/messages', {
       method: 'POST', timeoutMs: 60000,
       headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: config.keys.ANTHROPIC_MODEL || 'claude-sonnet-4-5', max_tokens: 2500, system: SYSTEM, messages: [{ role: 'user', content: userMsg }] }),
+      body: JSON.stringify({ model: config.keys.ANTHROPIC_MODEL || 'claude-sonnet-5-5', max_tokens: 2500, system: SYSTEM, messages: [{ role: 'user', content: userMsg }] }),
     });
     const text = (j.content || []).map(c => c.text || '').join('');
     const m = text.match(/\{[\s\S]*\}/);

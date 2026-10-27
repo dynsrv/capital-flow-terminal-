@@ -8,6 +8,8 @@ import * as A from './analytics.js';
 import { flows } from './flows.js';
 import { intelligence } from './ai.js';
 import * as R from './risk.js';
+import * as I from './insights.js';
+import { testCredential } from './keytest.js';
 
 // CORS so the published artifact (or any front-end) can call this API.
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-headers': 'authorization,content-type' };
@@ -57,11 +59,12 @@ async function handleApi(request, env, url) {
 
     if (p === '/flows') return wrap(await flows(ctx));
 
-    if (p === '/intel/anomalies') return wrap(await A.anomalies(ctx, parseIds(url, ASSETS.filter(a => a.cls !== 'macro' || a.id === 'VIX').map(a => a.id))));
+    if (p === '/intel/anomalies') { const an = await A.anomalies(ctx, parseIds(url, ASSETS.filter(a => a.cls !== 'macro' || a.id === 'VIX').map(a => a.id))); return wrap(url.searchParams.get('analysis') === '0' ? an : await I.annotateAnomalies(ctx, an)); }
     if (p === '/intel/patterns') return wrap(await A.patterns(ctx));
-    if (p === '/risk/table') return wrap(await R.riskTable(ctx));
+    if (p === '/risk/table') { const t = await R.riskTable(ctx); t.rows.forEach(r => { r.reading = I.rowReading(r); }); return wrap(t); }
+    if (p === '/risk/highlights') return wrap(await I.riskHighlights(ctx));
     if (p === '/risk/stress') return wrap(await R.stressIndex(ctx, Number(url.searchParams.get('years') || 2)));
-    if (p === '/risk/inflections') return wrap(await R.inflections(ctx));
+    if (p === '/risk/inflections') return wrap(await I.annotateSignals(ctx, await R.inflections(ctx)));
     if (p === '/risk/trend') return wrap(await R.trend(ctx, url.searchParams.get('id') || 'SPX', url.searchParams.get('window') || '1Y'));
     if (p === '/analytics/leaders') return wrap(await R.leaders(ctx, url.searchParams.get('anchor') || 'SPX'));
     if (p === '/intel/explain') {
@@ -87,6 +90,10 @@ async function handleApi(request, env, url) {
         const body = await request.json();
         await saveAdminKeys(env, body);
         return wrap({ saved: Object.keys(body) });
+      }
+      if (p === '/admin/test' && request.method === 'POST') {
+        const body = await request.json().catch(() => ({}));
+        return wrap({ key: body.key, ...(await testCredential(body.key, body.value ? String(body.value).trim() : '', config)) });
       }
       if (p === '/admin/sizes' && request.method === 'GET') { let o = {}; try { o = (await env.CACHE.get('admin:sizes', 'json')) || {}; } catch (e) {} return wrap({ references: SIZE_REFERENCES.map(r => ({ id: r.id, label: r.label, measure: r.measure, usd: r.usd, tonnes: r.tonnes, source: r.source, asOf: r.asOf, override: o[r.id] || null })) }); }
       if (p === '/admin/sizes' && request.method === 'POST') { const body = await request.json(); await env.CACHE.put('admin:sizes', JSON.stringify(body)); return wrap({ saved: true }); }
