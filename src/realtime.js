@@ -31,7 +31,23 @@ export const RT_MAP = {
   BTC: { coinbase: 'BTC-USD', massive: 'X:BTCUSD', alpaca: 'BTC/USD', twelvedata: 'BTC/USD' },
   ETH: { coinbase: 'ETH-USD', massive: 'X:ETHUSD', alpaca: 'ETH/USD', twelvedata: 'ETH/USD' },
   SOL: { coinbase: 'SOL-USD', massive: 'X:SOLUSD', alpaca: 'SOL/USD', twelvedata: 'SOL/USD' },
+  // Commodities: no provider publishes these on free plans. Finnhub's OANDA CFDs need a paid Finnhub plan; Twelve Data's
+  // commodity spot prices need a paid Twelve Data plan. The scan marks what your keys can price.
+  WTI: { finnhub: 'OANDA:WTICO_USD', twelvedata: 'WTI/USD' },
+  BRENT: { finnhub: 'OANDA:BCO_USD', twelvedata: 'XBR/USD' },
+  NATGAS: { finnhub: 'OANDA:NATGAS_USD' },
+  COPPER: { finnhub: 'OANDA:XCU_USD', twelvedata: 'HG1' },
+  // US Dollar Index: ICE does not license it to any of these providers, so it is computed from ICE's published formula
+  // over six live FX rates (the same arithmetic ICE uses). Its extra legs are polled only while DXY needs them.
+  DXY: { formula: 'ICE' },
+  USDCAD: { massive: 'C:USDCAD', finnhub: 'OANDA:USD_CAD', twelvedata: 'USD/CAD', leg: true },
+  USDSEK: { massive: 'C:USDSEK', finnhub: 'OANDA:USD_SEK', twelvedata: 'USD/SEK', leg: true },
+  USDCHF: { massive: 'C:USDCHF', finnhub: 'OANDA:USD_CHF', twelvedata: 'USD/CHF', leg: true },
 };
+// ICE US Dollar Index: 50.14348112 × EURUSD^-0.576 × USDJPY^0.136 × GBPUSD^-0.119 × USDCAD^0.091 × USDSEK^0.042 × USDCHF^0.036
+const DXY_W = { EURUSD: -0.576, USDJPY: 0.136, GBPUSD: -0.119, USDCAD: 0.091, USDSEK: 0.042, USDCHF: 0.036 };
+const dxyOf = (px) => { let v = 50.14348112; for (const [id, w] of Object.entries(DXY_W)) { if (!(px[id] > 0)) return null; v *= px[id] ** w; } return v; };
+const provOf = (m) => Object.keys(m).filter(k => k !== 'leg');
 
 export const PROVIDERS = {
   massive: { name: 'Massive (Polygon.io)', keys: ['MASSIVE_API_KEY'], covers: 'US indices (S&P 500, Nasdaq 100, Russell 2000, VIX), US ETFs, FX, metals, crypto', note: 'Real-time needs the Developer tier or above for each asset class; Basic/Starter are 15-minute delayed.' },
@@ -39,6 +55,7 @@ export const PROVIDERS = {
   finnhub: { name: 'Finnhub', keys: ['FINNHUB_API_KEY'], covers: 'US-listed ETFs; FX, gold, silver and US indices on paid plans', note: 'Free plan: real-time US quotes, about 60 calls/min, personal non-commercial use.' },
   twelvedata: { name: 'Twelve Data', keys: ['TWELVEDATA_API_KEY'], covers: 'FX, gold, silver, crypto, US ETFs', note: 'Free Basic: 8 credits/min (one per symbol), internal non-display use only. Grow from $29/mo for display use.' },
   coinbase: { name: 'Coinbase Exchange (public WebSocket)', keys: [], covers: 'BTC, ETH, SOL', note: 'Free, no key. Streams straight to the browser.' },
+  formula: { name: 'ICE formula (computed)', keys: [], covers: 'US Dollar Index from EUR, JPY, GBP, CAD, SEK, CHF', note: 'Computed from six live FX rates with ICE weights; live only when all six are priced.' },
 };
 const ORDER = ['massive', 'alpaca', 'finnhub', 'twelvedata'];
 
@@ -75,7 +92,7 @@ export async function saveRouting(ctx, patch) {
 const gapKey = (p, sym) => `rt:gap:${p}:${sym}`;
 async function knownGaps(ctx) {
   const out = new Set();
-  await Promise.all(Object.values(RT_MAP).flatMap(m => Object.entries(m).filter(([p]) => p !== 'coinbase').map(async ([p, sym]) => { try { const e = await ctx.cache.read(gapKey(p, sym)); if (e && e.fetchedAt && Date.now() - e.fetchedAt < 6 * 3600e3) out.add(p + '|' + sym); } catch (e) {} })));
+  await Promise.all(Object.values(RT_MAP).flatMap(m => Object.entries(m).filter(([p]) => p !== 'coinbase' && p !== 'formula' && p !== 'leg').map(async ([p, sym]) => { try { const e = await ctx.cache.read(gapKey(p, sym)); if (e && e.fetchedAt && Date.now() - e.fetchedAt < 6 * 3600e3) out.add(p + '|' + sym); } catch (e) {} })));
   return out;
 }
 
@@ -89,8 +106,13 @@ export function routeFor(s, routing, gaps, scan) {
     const scanned = (p) => scan && scan.results && scan.results[id] && scan.results[id][p];
     const ok = (p) => s.configured[p] && m[p] && (ov === p || (!gaps.has(p + '|' + m[p]) && !(scanned(p) && scanned(p).ok === false)));
     const chain = (ov && ov !== 'auto' ? [ov] : routing.priority).filter(ok);
+    if (m.formula) { if (!ov || ov === 'auto' || ov === 'formula') out[id] = { provider: 'formula', symbol: m.formula, path: 'formula', chain: [] }; continue; }
     if (chain.length) out[id] = { provider: chain[0], symbol: m[chain[0]], path: 'poll', chain, forced: !!(ov && ov !== 'auto') };
   }
+  // DXY legs: polled only while the formula needs them, and the formula only counts when every leg has a route
+  const legs = Object.keys(DXY_W);
+  if (out.DXY && out.DXY.path === 'formula' && !legs.every(l => out[l] && out[l].path === 'poll')) delete out.DXY;
+  for (const [id, m] of Object.entries(RT_MAP)) if (m.leg && !(out.DXY && out.DXY.path === 'formula')) delete out[id];
   return out;
 }
 /** Back-compatible synchronous view (no routing settings). */
@@ -184,6 +206,15 @@ export async function rtQuotes(ctx) {
       }
     }));
     pending = next;
+  }
+  if (cov.DXY && cov.DXY.path === 'formula') {
+    const by = Object.fromEntries(quotes.map(q => [q.id, q])); const legs = Object.keys(DXY_W).map(id => by[id]);
+    const price = legs.every(Boolean) ? dxyOf(Object.fromEntries(legs.map(q => [q.id, q.price]))) : null;
+    if (price != null) {
+      const prev = legs.every(q => q.prevClose) ? dxyOf(Object.fromEntries(legs.map(q => [q.id, q.prevClose]))) : null;
+      quotes.push({ id: 'DXY', price, prevClose: prev, pct1d: prev ? (price / prev - 1) * 100 : null, ts: legs.map(q => q.ts).sort()[0], source: 'formula', computed: true, legs: [...new Set(legs.map(q => q.source))].join('+') + ' FX', delayed: legs.some(q => q.delayed), stale: legs.some(q => q.stale) });
+      providers.formula = { name: PROVIDERS.formula.name, ok: true, priced: 1, missed: [] };
+    } else { unpriced.push('DXY'); providers.formula = { name: PROVIDERS.formula.name, ok: false, error: 'one or more FX legs not priced', priced: 0, missed: ['DXY'] }; }
   }
   return { enabled: true, intervalSec: s.intervalSec, quotes, providers, unpriced: [...unpriced, ...pending.map(x => x.id)] };
 }
