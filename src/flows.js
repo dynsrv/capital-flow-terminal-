@@ -56,7 +56,6 @@ export async function flows(ctx) {
 
   // 4. ETF / fund flows and exchange net flows require a licensed provider — reported as unavailable, never estimated.
   out.sections.push({ id: 'etf_flows', title: 'ETF & fund flows', type: 'flow', unavailable: true, reason: 'No free, licensed source for daily ETF creations/redemptions or fund flows is configured. Candidates: ETF.com / FactSet / ICI (weekly, lagged) / Farside (spot BTC ETFs). Add a connector in src/adapters and register it in Admin. Price moves and volume are NOT substituted for flows.', items: [] });
-  out.sections.push({ id: 'exchange_flows', title: 'Crypto exchange net flows & institutional positioning (CFTC COT)', type: 'flow', unavailable: true, reason: 'Exchange net-flow data (Glassnode/CryptoQuant) and CFTC Commitments of Traders need a dedicated adapter. Not estimated.', items: [] });
 
   return out;
 }

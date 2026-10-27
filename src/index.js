@@ -15,7 +15,7 @@ import { preCrash } from './precrash.js';
 import { getReading, refreshReading, scheduledRefresh, listModels, listReadings } from './reading.js';
 import { fetchNews, curateNews, getCurated, SOURCES as NEWS_SOURCES } from './news.js';
 import { getChannels, saveChannels, resetChannels, hlsRelay, DEFAULT_CHANNELS } from './tv.js';
-import { publicConfig, rtQuotes, rtSettings, PROVIDERS, RT_MAP, loadRouting, saveRouting, routeFor, scanPlans } from './realtime.js';
+import { publicConfig, rtQuotes, rtSettings, PROVIDERS, RT_MAP, loadRouting, saveRouting, routeFor, scanPlans, socketsFor } from './realtime.js';
 
 // CORS so the published artifact (or any front-end) can call this API.
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-headers': 'authorization,content-type' };
@@ -135,6 +135,7 @@ async function handleApi(request, env, url) {
       if (p === '/admin/tv' && request.method === 'GET') return wrap({ ...(await getChannels(ctx)), defaults: DEFAULT_CHANNELS });
       if (p === '/admin/tv' && request.method === 'POST') { const body = await request.json().catch(() => ({})); return wrap(body.reset ? await resetChannels(ctx) : await saveChannels(ctx, body.channels)); }
       if (p === '/admin/realtime' && request.method === 'POST') { const body = await request.json().catch(() => ({})); const patch = {}; if (Array.isArray(body.priority)) patch.priority = body.priority; if (body.overrides) patch.overrides = body.overrides; return wrap({ routing: await saveRouting(ctx, patch) }); }
+      if (p === '/admin/rt-sockets') return json({ ok: true, sockets: await socketsFor(ctx, 'admin') }, 200, { 'cache-control': 'no-store' });
       if (p === '/admin/realtime/scan' && request.method === 'POST') return wrap({ scan: await scanPlans(ctx) });
       if (p === '/admin/realtime') { const st = rtSettings(config); const routing = await loadRouting(ctx); const cov = routeFor(st, routing, new Set(), routing.scan); return wrap({ settings: { enabled: st.enabled, intervalSec: st.intervalSec, crypto: st.crypto, configured: st.configured, tdCredits: st.tdCredits }, routing, coverage: Object.keys(RT_MAP).map(id => ({ id, ...(cov[id] || { provider: null }), options: Object.keys(RT_MAP[id]), override: routing.overrides[id] || 'auto' })), providers: PROVIDERS, probe: st.enabled ? await rtQuotes(ctx) : null }); }
       if (p === '/admin/readings') return wrap({ readings: await listReadings(env) });

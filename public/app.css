@@ -1083,3 +1083,32 @@ body.rt-on .live { color: var(--up); }
   .gl-sec .gl-d { padding: 2px 14px 14px; }
   .gl-sec .gl-sec-h { padding: 12px 14px; }
 }
+.rt-ws { display: flex; flex-direction: column; gap: 4px; }
+.rt-w { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: calc(12px * var(--fs, 1)); color: var(--fg-2); }
+.rt-w i { width: 7px; height: 7px; border-radius: 50%; background: var(--fg-3); }
+.rt-w.live i { background: var(--up); box-shadow: 0 0 0 3px color-mix(in srgb, var(--up) 22%, transparent); animation: pulse 1.6s infinite; }
+.rt-w.subscribed i, .rt-w.open i, .rt-w.connecting i, .rt-w.reconnecting i { background: var(--warn); }
+.rt-w.error i { background: var(--down); }
+
+/* flat Indonesian flag on the news region switch */
+.flag-id { width: 16px; height: 11px; border-radius: 2px; flex: none; box-shadow: 0 0 0 1px var(--line-2); }
+
+/* ═════════════════════ modern dropdowns (all selects), matched to the theme ═════════════════════ */
+select, .input-select {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  height: 36px; padding: 0 34px 0 12px; border-radius: 8px;
+  border: 1px solid var(--line-2); background-color: var(--surface-2); color: var(--fg);
+  font: inherit; font-size: calc(12.5px * var(--fs, 1)); font-weight: 500; cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237c7c85' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; background-size: 14px 14px;
+  transition: border-color .15s, box-shadow .15s, background-color .15s;
+  text-overflow: ellipsis; white-space: nowrap; overflow: hidden;
+}
+select:hover { border-color: var(--fg-3); background-color: var(--raised); }
+select:focus, select:focus-visible { outline: none; border-color: #fb8b1e; box-shadow: 0 0 0 3px color-mix(in srgb, #fb8b1e 18%, transparent); }
+select:disabled { opacity: .5; cursor: default; }
+select option, select optgroup { background: var(--surface); color: var(--fg); font-weight: 400; }
+select optgroup { color: var(--fg-3); font-weight: 600; }
+:root[data-theme="light"] select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236e6e78' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); }
+.rt-tbl select, .tv-modal-h select { height: 30px; }
+@media (max-width: 759px) { select { height: 40px; font-size: max(16px, calc(14px * var(--fs, 1))); } }

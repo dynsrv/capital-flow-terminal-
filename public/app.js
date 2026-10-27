@@ -1067,7 +1067,7 @@
      Keyed providers are polled through /api/rt/quotes (keys stay on the server, one upstream call per interval for all
      visitors). Crypto streams tick-by-tick from Coinbase's public WebSocket. Every updated value is relabelled with its
      provider and timestamp; instruments without a real-time source keep their normal badge. */
-  const rt = { cfg: null, timer: null, ws: null, prev: {}, vals: {}, dirs: {}, painted: 0, queued: false, monAt: 0, wsRetry: 0, count: 0 };
+  const rt = { cfg: null, timer: null, ws: null, prev: {}, vals: {}, dirs: {}, painted: 0, queued: false, monAt: 0, wsRetry: 0, count: 0, sockets: {}, sock: {}, gen: 0 };
   function applyRt(id, price, o = {}) {
     const r = state.perf.find(x => x.id === id); if (!r || price == null || !isFinite(price)) return;
     if (rt.prev[id] == null) rt.prev[id] = o.prevClose ?? (r.price != null && r.pct1d != null ? r.price / (1 + r.pct1d / 100) : null);
@@ -1111,7 +1111,50 @@
     ws.onclose = () => { if (rt.ws !== ws) return; rt.ws = null; const d = Math.min(60000, 2000 * 2 ** rt.wsRetry++); setTimeout(() => { if (rt.cfg && rt.cfg.enabled && !rt.ws) openStream(cfg); }, d); };
     ws.onerror = () => { try { ws.close(); } catch (e) {} };
   }
-  function stopRt() { clearInterval(rt.timer); rt.timer = null; if (rt.ws) { const w = rt.ws; rt.ws = null; try { w.close(); } catch (e) {} } rt.vals = {}; document.body.classList.remove('rt-on'); }
+  function stopRt() { clearInterval(rt.timer); rt.timer = null; if (rt.ws) { const w = rt.ws; rt.ws = null; try { w.close(); } catch (e) {} } rt.gen++; for (const w of Object.values(rt.sockets)) { try { w.close(); } catch (e) {} } rt.sockets = {}; rt.sock = {}; rt.vals = {}; document.body.classList.remove('rt-on'); }
+  /* Provider WebSockets (admin-enabled). Each speaks its own protocol; ticks go through applyRt like polled quotes. */
+  function openProviderSocket(d, gen, retry = 0) {
+    if (gen !== rt.gen || typeof WebSocket === 'undefined') return;
+    const bySym = {}; for (const [id, sym] of Object.entries(d.symbols)) bySym[sym] = id;
+    const syms = Object.values(d.symbols); const st = rt.sock[d.provider] = { status: 'connecting', ticks: 0, mode: d.mode, n: syms.length, at: null, note: '' };
+    let ws; try { ws = new WebSocket(d.url); } catch (e) { st.status = 'error'; st.note = e.message; return; }
+    rt.sockets[d.provider] = ws;
+    const tick = (sym, price, ts) => { const id = bySym[sym]; const v = Number(price); if (!id || !isFinite(v) || v <= 0) return; st.ticks++; st.at = Date.now(); st.status = 'live'; applyRt(id, v, { ts: ts ? new Date(ts).toISOString() : new Date().toISOString(), source: d.provider + ' ws' }); };
+    const send = (o) => { try { ws.send(JSON.stringify(o)); } catch (e) {} };
+    ws.onopen = () => {
+      st.status = 'open';
+      if (d.provider === 'finnhub') syms.forEach(x => send({ type: 'subscribe', symbol: x }));
+      if (d.provider === 'twelvedata') send({ action: 'subscribe', params: { symbols: syms.join(',') } });
+      if (d.provider === 'massive') send(d.auth);
+    };
+    ws.onmessage = (ev) => {
+      let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+      if (d.provider === 'finnhub') { if (m.type === 'trade') for (const t of m.data || []) tick(t.s, t.p, t.t); else if (m.type === 'error') { st.status = 'error'; st.note = m.msg || 'error'; } }
+      else if (d.provider === 'twelvedata') { if (m.event === 'price') tick(m.symbol, m.price, m.timestamp ? m.timestamp * 1000 : null); else if (m.status === 'error' || m.event === 'subscribe-status' && m.status !== 'ok') { st.note = (m.messages || m.fails || m.message || '') + ''; } }
+      else for (const x of [].concat(m)) {
+        if (d.provider === 'massive') {
+          if (x.ev === 'status') { if (x.status === 'auth_success') { st.status = 'subscribed'; send({ action: 'subscribe', params: syms.map(y => 'T.' + y).join(',') }); } else if (/fail|max|error|not/i.test(x.status || '')) { st.status = 'error'; st.note = x.message || x.status; } }
+          else if (x.ev === 'T') tick(x.sym, x.p, x.t);
+        } else if (d.provider === 'alpaca') {
+          if (x.T === 'success' && x.msg === 'connected') send(d.auth);
+          else if (x.T === 'success' && x.msg === 'authenticated') { st.status = 'subscribed'; send({ action: 'subscribe', trades: syms }); }
+          else if (x.T === 't') tick(x.S, x.p, x.t);
+          else if (x.T === 'error') { st.status = 'error'; st.note = `${x.code || ''} ${x.msg || ''}`.trim(); }
+        }
+      }
+    };
+    ws.onclose = () => {
+      if (rt.sockets[d.provider] !== ws) return; delete rt.sockets[d.provider];
+      if (gen !== rt.gen || st.status === 'error' && /auth|key|limit|max|406|connection limit/i.test(st.note)) { if (st.status !== 'error') st.status = 'closed'; return; }
+      st.status = 'reconnecting'; setTimeout(() => openProviderSocket(d, gen, retry + 1), Math.min(60000, 2000 * 2 ** retry));
+    };
+    ws.onerror = () => { try { ws.close(); } catch (e) {} };
+  }
+  async function openProviderSockets() {
+    const gen = rt.gen; const list = [...((rt.cfg && rt.cfg.sockets) || [])];
+    if (state.admin.token) { try { const r = await api('/admin/rt-sockets', { headers: { authorization: 'Bearer ' + state.admin.token } }); for (const d of r.sockets || []) if (!list.some(x => x.provider === d.provider)) list.push(d); } catch (e) {} }
+    for (const d of list) openProviderSocket(d, gen);
+  }
   async function startRt() {
     if (SNAP && !apiBase) return; // the embedded snapshot never streams
     try { rt.cfg = await api('/rt/config'); } catch (e) { return; }
@@ -1119,6 +1162,7 @@
     document.body.classList.add('rt-on');
     if (rt.cfg.polled.length) { pollRt(); rt.timer = setInterval(pollRt, rt.cfg.intervalSec * 1000); }
     if (rt.cfg.stream) openStream(rt.cfg.stream);
+    openProviderSockets();
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden && rt.timer) pollRt(); });
 
@@ -1142,6 +1186,7 @@
     const draw = () => {
       box.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">
         <div class="kv"><dt>Status</dt><dd class="${st.enabled ? 'up' : 'muted'}">${st.enabled ? 'on' : 'off'} · every ${st.intervalSec} s</dd><dt>Crypto stream</dt><dd>${esc(st.crypto)}</dd>${r.probe ? Object.entries(r.probe.providers || {}).map(([p, x]) => `<dt>${esc(pname(p))}</dt><dd class="${x.ok ? 'up' : 'down'}">${x.ok ? `${x.priced} priced` : esc(String(x.error || 'error').slice(0, 60))}</dd>`).join('') : ''}${r.probe && r.probe.unpriced && r.probe.unpriced.length ? `<dt>Not live</dt><dd class="muted">${r.probe.unpriced.join(', ')}</dd>` : ''}</div>
+        <div id="rt-ws-status"></div>
         <div><div class="field"><label>Provider priority</label></div><div class="rt-prio">${prio.map((p, i) => `<span class="rt-p ${st.configured[p] ? '' : 'off'}"><b>${i + 1}</b>${esc(pname(p))}${st.configured[p] ? '' : ' <i>no key</i>'}<button type="button" class="icon-btn sm" data-up="${i}" ${i === 0 ? 'disabled' : ''} aria-label="Move up">↑</button><button type="button" class="icon-btn sm" data-dn="${i}" ${i === prio.length - 1 ? 'disabled' : ''} aria-label="Move down">↓</button></span>`).join('')}</div>
         <p class="xs muted" style="margin-top:6px">Each instrument uses the first provider in this order that your plan covers; anything a provider can't price falls through to the next one automatically.</p></div>
         <div class="row-actions"><button class="btn ghost" id="rt-scan">${ic('pulse')}Scan my plans</button><span class="xs muted" style="align-self:center">${scan ? `Last scan ${fmt.ago(scan.at)}: ${Object.values(scan.summary).map(x => `${esc(x.name.split(' (')[0])} ${x.priced}/${x.of}`).join(' · ')}` : 'Not scanned yet. Tests every instrument against every saved key.'}</span></div>
@@ -1162,6 +1207,8 @@
     };
     const RT_OPTS = (c, p) => c.options.includes(p);
     draw();
+    const wsBox = () => { const el = $('#rt-ws-status'); if (!el) return false; const e = Object.entries(rt.sock); el.innerHTML = e.length ? `<div class="field"><label>WebSocket streams in this browser</label></div><div class="rt-ws">${e.map(([p, x]) => `<span class="rt-w ${x.status}"><i></i><b>${esc(pname(p))}</b> ${esc(x.status)} · ${x.n} symbols · ${x.ticks} ticks${x.at ? ` · last ${fmt.ago(new Date(x.at).toISOString())}` : ''}${x.note ? ` · <span class="down">${esc(x.note.slice(0, 80))}</span>` : ''} <span class="xs muted">(${x.mode === 'everyone' ? 'all visitors' : 'admin only'})</span></span>`).join('')}</div>` : `<p class="xs muted">WebSocket streams: none running. Turn one on in the Real-time group of the credentials panel (Massive, Alpaca, Finnhub or Twelve Data WebSocket), then save.</p>`; return true; };
+    wsBox(); clearInterval(renderAdminRealtime._t); renderAdminRealtime._t = setInterval(() => { if (!wsBox()) clearInterval(renderAdminRealtime._t); }, 2000);
   }
 
   /* ═════════════════════ GLOSSARY ═════════════════════ */
