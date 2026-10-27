@@ -41,6 +41,34 @@ function finalize(asset, res, extra = {}) {
 }
 
 /* ───────────────────────────── Histories ───────────────────────────── */
+// Persisted history snapshots (written by the daily cron) serve cold instances without a round-trip to the
+// upstream source. A snapshot older than 36 hours is ignored so a dead cron cannot freeze the data.
+const SNAP_MAX_AGE = 36 * 36e5;
+async function withSnapshot(ctx, key, loader) {
+  const store = ctx.env && ctx.env.__store;
+  return async () => {
+    if (store && store.persistent) {
+      try { const snap = await store.getJSON('hist/' + key, { maxAgeMs: 10 * 60e3 }); if (snap && snap.savedAt && Date.now() - new Date(snap.savedAt).getTime() < SNAP_MAX_AGE) return { ...snap.data, fromSnapshot: snap.savedAt }; } catch (e) { /* fall through */ }
+    }
+    return loader();
+  };
+}
+/** Write the current histories of every instrument to the store (called by the daily cron). */
+export async function persistHistories(ctx) {
+  const store = ctx.env && ctx.env.__store; if (!store || !store.persistent) return { skipped: 'no persistent store' };
+  let n = 0, failed = 0;
+  for (const a of ASSETS) {
+    const src = a.history ? a.history.source : a.source; const sym = a.history ? a.history.symbol : a.symbol;
+    const key = src === 'coingecko' ? `cg:${sym}:${ctx.config.keys.COINGECKO_API_KEY ? 'max' : 365}` : `${src}:${sym}`;
+    try {
+      const h = await getHistory(ctx, a.id);
+      if (!h.points.length || h.stale) { failed++; continue; }
+      const data = src === 'coingecko' ? { points: h.points, marketCaps: h.marketCaps, volumes: h.volumes, source: 'coingecko', freshness: 'eod' } : src === 'fred' ? { points: h.rawPoints || h.points, source: 'fred', seriesId: sym, url: h.url } : { points: h.points, volumes: h.volumes, source: 'yahoo', freshness: 'eod', currency: 'USD' };
+      await store.putJSON('hist/' + key, { savedAt: new Date().toISOString(), id: a.id, data }); n++;
+    } catch (e) { failed++; }
+  }
+  return { persisted: n, failed };
+}
 
 export async function getHistory(ctx, id) {
   const asset = ASSET_MAP[id];
@@ -52,19 +80,20 @@ export async function getHistory(ctx, id) {
   const sym = asset.history ? asset.history.symbol : asset.symbol;
 
   if (src === 'yahoo') {
-    const r = await cache.resolve(`h:yahoo:${sym}`, config.ttl.history, () => yahoo.history(sym, '10y'));
+    const r = await cache.resolve(`h:yahoo:${sym}`, config.ttl.history, await withSnapshot(ctx, `yahoo:${sym}`, () => yahoo.history(sym, '10y')));
     return { id, points: r.data ? r.data.points : [], volumes: r.data ? r.data.volumes : [], source: 'yahoo', freshness: 'eod', stale: r.stale, error: r.error || null, fetchedAt: r.fetchedAt };
   }
   if (src === 'fred') {
-    const r = await cache.resolve(`h:fred:${sym}`, config.ttl.macro, () => fred.series(sym, { apiKey: config.keys.FRED_API_KEY, years: 12 }));
-    let points = r.data ? r.data.points : [];
+    const r = await cache.resolve(`h:fred:${sym}`, config.ttl.macro, await withSnapshot(ctx, `fred:${sym}`, () => fred.series(sym, { apiKey: config.keys.FRED_API_KEY, years: 12 })));
+    const rawPoints = r.data ? r.data.points : [];
+    let points = rawPoints;
     if (asset.transform === 'yoy') points = fred.yoy(points);
-    return { id, points, source: 'fred', freshness: asset.freshness, stale: r.stale, error: r.error || null, fetchedAt: r.fetchedAt, url: r.data && r.data.url };
+    return { id, points, rawPoints, source: 'fred', freshness: asset.freshness, stale: r.stale, error: r.error || null, fetchedAt: r.fetchedAt, url: r.data && r.data.url, fromSnapshot: r.data && r.data.fromSnapshot || null };
   }
   if (src === 'coingecko') {
     const key = config.keys.COINGECKO_API_KEY;
     const days = key ? 'max' : 365;
-    const r = await cache.resolve(`h:cg:${sym}:${days}`, Math.max(config.ttl.history, 1800), () => cg.marketChart(sym, key, days));
+    const r = await cache.resolve(`h:cg:${sym}:${days}`, Math.max(config.ttl.history, 1800), await withSnapshot(ctx, `cg:${sym}:${days}`, () => cg.marketChart(sym, key, days)));
     return { id, points: r.data ? r.data.points : [], marketCaps: r.data ? r.data.marketCaps : [], volumes: r.data ? r.data.volumes : [], source: 'coingecko', freshness: 'eod', stale: r.stale, error: r.error || null, fetchedAt: r.fetchedAt, coverageNote: key ? null : 'CoinGecko free tier: 365 days max; add an API key in Admin for longer history' };
   }
   throw new Error(`No history adapter for ${src}`);

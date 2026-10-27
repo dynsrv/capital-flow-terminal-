@@ -47,6 +47,12 @@
     coins: '<circle cx="8" cy="8" r="6"/><path d="M18.1 10.4A6 6 0 1 1 10.3 18"/><path d="M7 6h1v4"/>',
     flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.4-.5-2-1-3-1-2.1-.2-4.1 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.2.4-2.3 1-3.4.3 1.7 1.3 2.9 2.5 2.9z"/>',
     swap: '<path d="M7 16V4M3 8l4-4 4 4"/><path d="M17 8v12M21 16l-4 4-4-4"/>',
+    news: '<path d="M4 4h12a2 2 0 0 1 2 2v12a2 2 0 0 0 2 2H6a2 2 0 0 1-2-2z"/><path d="M18 8h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2"/><path d="M8 8h6M8 12h6M8 16h4"/>',
+    tv: '<rect x="2" y="7" width="20" height="13" rx="2"/><path d="m17 2-5 5-5-5"/>',
+    expand: '<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
+    popout: '<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><path d="M15 3h6v6M10 14 21 3"/>',
+    play: '<path d="M6 4l14 8-14 8z"/>',
+    external: '<path d="M15 3h6v6M10 14 21 3M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"/>',
   };
   const ic = (n, cls = '') => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${P[n] || ''}</svg>`;
   const paintIcons = (root = document) => $$('[data-icon]', root).forEach(e => { if (!e.querySelector('svg')) e.innerHTML = ic(e.dataset.icon) + e.innerHTML; });
@@ -62,7 +68,6 @@
     shock: { label: 'Shock Sim', icon: 'shock', title: 'Shock simulator', sub: 'Historical sensitivities applied to a hypothetical move' },
     admin: { label: 'Admin', icon: 'admin', title: 'Admin', sub: 'API credentials, source health and reference data' },
   };
-  const PRIMARY_MOBILE = ['overview', 'monitor', 'analytics', 'risk'];
 
   /* ───────── state ───────── */
   const state = {
@@ -73,6 +78,8 @@
     risk: { trendId: 'SPX', trendWindow: '1Y', dir: 'all', sortKey: 'volPct', sortAsc: false },
     shock: { driver: 'SPX', value: -10, window: '1Y', betas: null },
     admin: { token: (() => { try { return sessionStorage.getItem('cft:admin') || ''; } catch (e) { return ''; } })() },
+    news: { region: 'all', cat: 'all', data: null },
+    tv: { streams: [], current: store.get('cft:tv', 'bloomberg'), playing: false },
   };
 
   /* ───────── API ───────── */
@@ -159,7 +166,7 @@
 
   /* overlay management */
   function openScrim(onClose) { const s = $('#scrim'); s.hidden = false; s.onclick = () => { closeOverlays(); onClose && onClose(); }; }
-  function closeOverlays() { $('#scrim').hidden = true; $('#drawer').hidden = true; $('#sheet').hidden = true; $('#popover').hidden = true; }
+  function closeOverlays() { $('#scrim').hidden = true; $('#drawer').hidden = true; $('#popover').hidden = true; $('#side').classList.remove('open'); closeTvModal(); }
   document.addEventListener('keydown', e => { if (e.key === 'Escape') closeOverlays(); });
 
   /* asset picker popover */
@@ -186,12 +193,13 @@
 
   /* ───────── shell ───────── */
   function buildNav() {
-    const item = (k) => `<button type="button" data-view="${k}" title="${esc(VIEWS[k].label)}">${ic(VIEWS[k].icon)}<span class="lbl">${esc(VIEWS[k].label)}</span>${VIEWS[k].tag ? `<span class="tag">${VIEWS[k].tag}</span>` : ''}</button>`;
-    $('#nav').innerHTML = `<div class="nav-label">Markets</div>${['overview', 'monitor', 'flows'].map(item).join('')}<div class="nav-label">Analysis</div>${['analytics', 'risk', 'intel', 'shock'].map(item).join('')}<div class="nav-label">System</div>${item('admin')}`;
-    $('#tabbar').innerHTML = PRIMARY_MOBILE.map(k => `<button type="button" data-view="${k}">${ic(VIEWS[k].icon)}<span>${esc(k === 'risk' ? 'Risk' : VIEWS[k].label)}</span></button>`).join('') + `<button type="button" data-more="1">${ic('more')}<span>More</span></button>`;
-    $('#sheet-nav').innerHTML = Object.keys(VIEWS).filter(k => !PRIMARY_MOBILE.includes(k)).map(item).join('');
-    const go = (e) => { const b = e.target.closest('button'); if (!b) return; if (b.dataset.more) { $('#sheet').hidden = false; openScrim(); return; } if (b.dataset.view) { closeOverlays(); show(b.dataset.view); } };
-    $('#nav').onclick = go; $('#tabbar').onclick = go; $('#sheet-nav').onclick = go;
+    const item = (k) => `<button type="button" data-view="${k}" title="${esc(VIEWS[k].title)}">${ic(VIEWS[k].icon)}<span class="lbl">${esc(VIEWS[k].label)}</span>${VIEWS[k].tag ? `<span class="tag">${VIEWS[k].tag}</span>` : ''}</button>`;
+    const html = ['overview', 'monitor', 'flows'].map(item).join('') + '<span class="nav-sep"></span>' + ['analytics', 'risk', 'intel', 'shock'].map(item).join('') + '<span class="nav-sep"></span>' + item('admin');
+    $('#nav').innerHTML = html; $('#nav-mobile').innerHTML = html;
+    const go = (e) => { const b = e.target.closest('button'); if (b && b.dataset.view) { closeOverlays(); show(b.dataset.view); } };
+    $('#nav').onclick = go; $('#nav-mobile').onclick = go;
+    $('#side-btn').onclick = () => { const o = $('#side').classList.toggle('open'); if (o) openScrim(() => $('#side').classList.remove('open')); else closeOverlays(); };
+    $('#side-close').onclick = closeOverlays;
   }
   function setPills(regime, stress) {
     if (regime) { const p = $('#regime-pill'); p.className = 'pill ' + (regime.label.startsWith('RISK-ON') ? 'on' : regime.label.startsWith('RISK-OFF') ? 'off' : 'mid'); $('span', p).textContent = regime.label.replace(' / MIXED', ''); p.title = `Rules-based regime score ${regime.score} (−1 risk-off … +1 risk-on)`; }
@@ -216,8 +224,66 @@
   function renderHealth() {
     const by = {}; for (const q of state.perf) { const s = by[q.source] || (by[q.source] = { ok: 0, n: 0 }); s.n++; if (q.available && !q.stale) s.ok++; }
     const name = { yahoo: 'Yahoo Finance', fred: 'FRED', coingecko: 'CoinGecko', goldapi: 'gold-api', demo: 'Demo' };
-    $('#side-health').innerHTML = Object.entries(by).map(([s, v]) => `<div class="health-row" title="${esc(name[s] || s)}: ${v.ok}/${v.n} instruments OK"><i class="dot ${v.ok === v.n ? 'ok' : 'bad'}"></i><span>${esc(name[s] || s)}</span><b>${v.ok}/${v.n}</b></div>`).join('');
+    $('#side-health').innerHTML = Object.entries(by).map(([s, v]) => `<span class="health-row" title="${esc(name[s] || s)}: ${v.ok}/${v.n} instruments OK"><i class="dot ${v.ok === v.n ? 'ok' : 'bad'}"></i>${esc(name[s] || s)} <b>${v.ok}/${v.n}</b></span>`).join('');
   }
+
+  /* ═════════════════════ SIDEBAR: NEWS ═════════════════════ */
+  const dayLabel = (iso) => { if (!iso) return 'Undated'; const d = new Date(iso); const t = new Date(); const diff = Math.floor((Date.UTC(t.getFullYear(), t.getMonth(), t.getDate()) - Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())) / 86400e3); return diff <= 0 ? 'Today' : diff === 1 ? 'Yesterday' : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' }); };
+  function newsItem(it) {
+    const pick = it.curated;
+    return `<a class="news-item ${pick ? 'pick' : ''}" href="${esc(it.link)}" target="_blank" rel="noopener"><div class="nt">${esc(it.title)}</div><div class="nm"><span class="src">${esc(it.source)}</span><span>${it.publishedAt ? fmt.ago(it.publishedAt) : ''}</span><span class="ct ${it.cat}">${it.cat}</span><span class="rg">${it.region === 'indonesia' ? 'ID' : 'Global'}</span>${pick ? '<span class="badge ai">AI pick</span>' : ''}</div>${pick && it.why ? `<div class="why">${esc(it.why)}</div>` : ''}${pick && it.assets && it.assets.length ? `<div class="assets">${it.assets.slice(0, 6).map(a => `<span>${esc(a)}</span>`).join('')}</div>` : ''}</a>`;
+  }
+  function drawNews() {
+    const n = state.news; const box = $('#news-list'); const d = n.data; if (!d) return;
+    const aiBtn = $('#news-cat [data-v="ai"]'); const hasAI = !!(d.curated && d.curated.picks && d.curated.picks.length); aiBtn.hidden = !hasAI; if (!hasAI && n.cat === 'ai') n.cat = 'all';
+    $$('#news-cat .chip').forEach(b => b.classList.toggle('active', b.dataset.v === n.cat));
+    const pickMap = new Map(hasAI ? d.curated.picks.map(p => [p.link, p]) : []);
+    let items = n.cat === 'ai' ? d.curated.picks.map(p => ({ ...p, curated: true })) : d.items.map(it => pickMap.has(it.link) ? { ...it, ...pickMap.get(it.link), curated: true } : it);
+    if (n.region !== 'all') items = items.filter(i => i.region === n.region);
+    if (n.cat !== 'all' && n.cat !== 'ai') items = items.filter(i => i.cat === n.cat);
+    if (!items.length) { box.innerHTML = emptyState('No headlines match these filters', 'news'); return; }
+    let html = '', day = null;
+    for (const it of items) { if (n.cat !== 'ai') { const l = dayLabel(it.publishedAt); if (l !== day) { day = l; html += `<div class="news-day">${l}</div>`; } } html += newsItem(it); }
+    const failed = (d.sources || []).filter(s => s.error).map(s => s.name);
+    html += `<div class="news-foot">${hasAI ? `AI curation ${fmt.ago(d.curated.curatedAt)} (${esc(d.curated.model)})${d.curated.themes && d.curated.themes.length ? ' · themes: ' + esc(d.curated.themes.join(', ')) : ''}. ` : ''}${d.sources ? `${d.sources.length - failed.length}/${d.sources.length} feeds` : ''}${failed.length ? ` · unavailable: ${esc(failed.join(', '))}` : ''}. Headlines are public RSS; opening a story leaves this site.</div>`;
+    box.innerHTML = html;
+  }
+  async function loadNews(force = false) {
+    const n = state.news; const meta = $('#news-meta');
+    try { const d = await api('/news' + (force ? '?t=' + Date.now() : '')); n.data = d; meta.textContent = `${d.items.length} · ${fmt.ago(d.asOf)}`; drawNews(); }
+    catch (e) { if (!n.data) $('#news-list').innerHTML = errorBox(SNAP && !apiBase ? 'Headlines are not part of the embedded snapshot. Connect the live API to load them.' : e.message); }
+  }
+  $('#news-region').onclick = e => { const b = e.target.closest('button'); if (!b) return; state.news.region = b.dataset.v; $$('#news-region button').forEach(x => x.classList.toggle('active', x === b)); drawNews(); };
+  $('#news-cat').onclick = e => { const b = e.target.closest('button'); if (!b) return; state.news.cat = b.dataset.v; drawNews(); };
+  $('#news-refresh').onclick = () => loadNews(true);
+
+  /* ═════════════════════ SIDEBAR: LIVE TV ═════════════════════ */
+  const tvCur = () => state.tv.streams.find(s => s.id === state.tv.current) || state.tv.streams[0];
+  const canEmbed = !(SNAP && !apiBase) && (() => { try { return window.self === window.top || !!document.featurePolicy; } catch (e) { return true; } })();
+  const tvPoster = (s, big = false) => `<div class="tv-poster" data-play="1"><span class="play">${ic('play')}</span><b>${esc(s.name)}</b><span>${canEmbed ? 'Click to play (muted)' : 'Embedded playback is not available in this viewer'}</span>${canEmbed ? '' : `<a href="${esc(s.watch)}" target="_blank" rel="noopener">Open the live stream on YouTube</a>`}</div>`;
+  const tvIframe = (s) => `<iframe src="${esc(s.embed)}" title="${esc(s.name)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`;
+  function drawTv() {
+    const t = state.tv; const s = tvCur(); if (!s) { $('#tv-frame').innerHTML = emptyState('No streams configured', 'tv'); return; }
+    const opts = (sel) => { const groups = {}; t.streams.forEach(x => (groups[x.group] ||= []).push(x)); sel.innerHTML = Object.entries(groups).map(([g, arr]) => `<optgroup label="${esc(g)}">${arr.map(x => `<option value="${x.id}" ${x.id === s.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</optgroup>`).join(''); };
+    opts($('#tv-select')); opts($('#tv-modal-select'));
+    const modalOpen = !$('#tv-modal').hidden;
+    $('#tv-frame').innerHTML = t.playing && canEmbed && !modalOpen ? tvIframe(s) : tvPoster(s);
+    if (modalOpen) { $('#tv-modal-frame').innerHTML = canEmbed ? tvIframe(s) : tvPoster(s); $('#tv-modal-yt').href = s.watch; }
+  }
+  function openTvModal() { const s = tvCur(); if (!s) return; $('#tv-modal').hidden = false; state.tv.playing = true; drawTv(); }
+  function closeTvModal() { const m = $('#tv-modal'); if (m.hidden) return; m.hidden = true; $('#tv-modal-frame').innerHTML = ''; drawTv(); }
+  function popOutTv() { const s = tvCur(); if (!s) return; const base = apiBase ? apiBase.replace(/\/$/, '') : ''; const w = window.open(`${base}/tv.html?c=${encodeURIComponent(s.id)}`, 'cft-tv', 'popup=yes,width=960,height=600,resizable=yes'); if (!w) { toast('Pop-up blocked by the browser'); return; } state.tv.playing = false; closeTvModal(); drawTv(); }
+  async function loadTv() {
+    try { const r = await api('/tv/streams'); state.tv.streams = r.streams || []; if (!tvCur()) state.tv.current = state.tv.streams[0] && state.tv.streams[0].id; drawTv(); }
+    catch (e) { $('#tv-frame').innerHTML = emptyState('Stream list unavailable', 'tv'); }
+  }
+  const pickTv = (id) => { state.tv.current = id; store.set('cft:tv', id); drawTv(); };
+  $('#tv-select').onchange = e => pickTv(e.target.value);
+  $('#tv-modal-select').onchange = e => pickTv(e.target.value);
+  $('#tv-frame').onclick = e => { if (e.target.closest('[data-play]') && !e.target.closest('a')) { if (!canEmbed) return; state.tv.playing = true; drawTv(); } };
+  $('#tv-modal-frame').onclick = e => { if (e.target.closest('[data-play]') && !e.target.closest('a') && canEmbed) { $('#tv-modal-frame').innerHTML = tvIframe(tvCur()); } };
+  $('#tv-max').onclick = openTvModal; $('#tv-modal-close').onclick = closeTvModal;
+  $('#tv-pop').onclick = popOutTv; $('#tv-modal-pop').onclick = popOutTv;
 
   /* ───────── analysis renderers ───────── */
   const peerMove = (p) => p.move == null ? 'n/a' : p.unit === 'bp' ? `${p.move > 0 ? '+' : ''}${Math.round(p.move)} bp` : fmt.pct(p.move);
@@ -652,7 +718,9 @@
       ${card({ icon: 'key', title: 'API credentials', sub: 'Stored server-side; values are never shown in full', body: `<div class="form-row"><label for="adm-token">Admin token</label><div class="inline"><input type="password" id="adm-token" value="${esc(a.token)}" placeholder="ADMIN_TOKEN" autocomplete="off"><button class="btn" id="adm-unlock">Unlock</button></div><div class="help">Kept in this browser tab only.</div></div><div id="adm-fields"></div>` })}
       <div style="display:flex;flex-direction:column;gap:var(--gap);min-width:0">
         ${card({ icon: 'intel', title: 'AI reading', sub: 'Generate or schedule the market reading shown on the Intelligence page', body: '<div id="adm-ai"><p class="dim">Unlock to manage.</p></div>' })}
-        ${card({ icon: 'db', title: 'Source health & cache', body: '<div id="adm-status"><p class="dim">Unlock to view.</p></div>' })}
+        ${card({ icon: 'news', title: 'News curation', sub: 'Optional: let a model rank and annotate the sidebar headlines', body: '<div id="adm-news"><p class="dim">Unlock to manage.</p></div>' })}
+        ${card({ icon: 'tv', title: 'Live TV channels', sub: 'YouTube channels offered in the sidebar player', body: '<div id="adm-tv"><p class="dim">Unlock to edit.</p></div>' })}
+        ${card({ icon: 'db', title: 'Storage & cache', body: '<div id="adm-status"><p class="dim">Unlock to view.</p></div>' })}
         ${card({ icon: 'info', title: 'How data is handled', body: '<div class="sm dim" style="display:flex;flex-direction:column;gap:8px"><p><b>No key needed:</b> Yahoo Finance (delayed), FRED, CoinGecko public, gold-api.com.</p><p><b>Optional:</b> FRED, EIA, CoinGecko (longer history), Anthropic (AI explanations), Exa or Parallel (news citations).</p><p><b>Cache:</b> quotes 60 s, histories 15 min, macro 1 h. If a source fails, the last value is served and flagged stale.</p><p><b>Demo mode</b> shows a permanent banner and every badge reads demo.</p></div>' })}
       </div></div>
       ${card({ icon: 'layers', title: 'Market-size reference data', sub: 'Published aggregates behind the Overview treemap', body: '<div id="adm-sizes"><p class="dim">Unlock to edit.</p></div>', foot: 'Update when a newer SIFMA Fact Book or World Gold Council figure is published, and keep the source and as-of date.' })}`;
@@ -689,7 +757,8 @@
           $('#adm-ai-run').onclick = async (e) => { const b = e.currentTarget; b.disabled = true; const old = b.innerHTML; b.innerHTML = `<span class="spin" style="width:12px;height:12px"></span>Refreshing…`; try { const r = await api('/admin/ai-refresh', { method: 'POST', headers: hdr(), body: JSON.stringify({ model: $('#adm-ai-model').value || undefined, question: $('#adm-ai-q').value || undefined }) }); toast(`Reading refreshed with ${r.reading.model}`); unlock(); } catch (err) { toast(err.message); b.disabled = false; b.innerHTML = old; } };
           $$('#adm-ai [data-go]').forEach(x => x.onclick = () => show(x.dataset.go));
         } catch (e) { $('#adm-ai').innerHTML = errorBox(e.message); }
-        $('#adm-status').innerHTML = `<div class="tbl"><table class="t"><thead><tr><th>Source</th><th class="num">OK</th><th class="num">Failed</th><th class="num">Stale</th></tr></thead><tbody>${Object.entries(st.bySource).map(([s, x]) => `<tr><td><span style="display:inline-flex;gap:8px;align-items:center"><i class="dot ${x.failed ? 'bad' : 'ok'}"></i>${esc(s)}</span>${x.errors.length ? `<div class="xs muted">${x.errors.map(esc).join('<br>')}</div>` : ''}</td><td class="num up">${x.ok}</td><td class="num ${x.failed ? 'down' : 'muted'}">${x.failed}</td><td class="num ${x.stale ? 'down' : 'muted'}">${x.stale}</td></tr>`).join('')}</tbody></table></div><p class="xs muted" style="margin:10px 0">Key-value store: ${st.kv ? 'connected' : 'not connected (memory cache only)'} · demo mode ${st.demoMode ? 'on' : 'off'}</p><button class="btn ghost" id="adm-clear">${ic('refresh')}Clear cache</button>`;
+        renderAdminNews(hdr); renderAdminTv(hdr); renderAdminStore(hdr);
+        $('#adm-status').innerHTML = `<div class="tbl"><table class="t"><thead><tr><th>Source</th><th class="num">OK</th><th class="num">Failed</th><th class="num">Stale</th></tr></thead><tbody>${Object.entries(st.bySource).map(([s, x]) => `<tr><td><span style="display:inline-flex;gap:8px;align-items:center"><i class="dot ${x.failed ? 'bad' : 'ok'}"></i>${esc(s)}</span>${x.errors.length ? `<div class="xs muted">${x.errors.map(esc).join('<br>')}</div>` : ''}</td><td class="num up">${x.ok}</td><td class="num ${x.failed ? 'down' : 'muted'}">${x.failed}</td><td class="num ${x.stale ? 'down' : 'muted'}">${x.stale}</td></tr>`).join('')}</tbody></table></div><div id="adm-store" style="margin:10px 0"></div><button class="btn ghost" id="adm-clear">${ic('refresh')}Clear cache</button>`;
         $('#adm-clear').onclick = async () => { try { const r = await api('/admin/cache/clear', { method: 'POST', headers: hdr() }); toast(`Cleared ${r.cleared} cache entries`); } catch (e) { toast(e.message); } };
         $('#adm-sizes').innerHTML = sz.references.filter(r => r.id !== 'CRYPTO_TOTAL').map(r => `<div class="form-row"><label>${esc(r.label)} <span class="xs muted">${esc(r.measure.replace(/_/g, ' '))}</span></label><div class="inline"><input type="number" data-sz="${r.id}" data-f="${r.tonnes ? 'tonnes' : 'usd'}" placeholder="${r.tonnes ? r.tonnes + ' tonnes' : (r.usd / 1e12).toFixed(1) + ' $T'}" value="${r.override ? (r.override.tonnes || r.override.usd / 1e12) : ''}" aria-label="${esc(r.label)} value"><input type="text" data-szs="${r.id}" placeholder="${esc(r.source)}" value="${esc(r.override?.source || '')}" aria-label="Source"><input type="text" data-sza="${r.id}" placeholder="${esc(r.asOf)}" value="${esc(r.override?.asOf || '')}" aria-label="As of" style="flex:0 1 90px"></div></div>`).join('') + `<div class="row-actions" style="margin-top:12px"><button class="btn" id="adm-size-save">Save reference data</button></div>`;
         $('#adm-size-save').onclick = async () => { const o = {}; $$('#adm-sizes input[data-sz]').forEach(i => { if (!i.value) return; const id = i.dataset.sz; o[id] = i.dataset.f === 'tonnes' ? { tonnes: Number(i.value) } : { usd: Number(i.value) * 1e12 }; o[id].source = $(`[data-szs="${id}"]`).value || undefined; o[id].asOf = $(`[data-sza="${id}"]`).value || undefined; }); try { await api('/admin/sizes', { method: 'POST', headers: hdr(), body: JSON.stringify(o) }); toast('Reference data saved'); } catch (e) { toast(e.message); } };
@@ -697,6 +766,45 @@
     };
     $('#adm-unlock').onclick = unlock; $('#adm-token').onkeydown = e => { if (e.key === 'Enter') unlock(); };
     if (a.token) unlock();
+  }
+
+  async function renderAdminNews(hdr) {
+    const box = $('#adm-news');
+    try {
+      const [nw, src] = await Promise.all([api('/news'), api('/admin/news-sources', { headers: hdr() })]);
+      const cur = nw.curated;
+      box.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
+        <div class="kv"><dt>Mode</dt><dd>${nw.aiCuration ? 'on' : 'off'}</dd><dt>Last curation</dt><dd>${cur ? `${fmt.time(cur.curatedAt)} (${fmt.ago(cur.curatedAt)})` : 'none yet'}</dd><dt>Model</dt><dd>${cur ? esc(cur.model) : '—'}</dd><dt>Picks</dt><dd>${cur ? cur.picks.length : '—'}</dd><dt>Headlines now</dt><dd>${nw.items.length}</dd></div>
+        ${cur && cur.themes && cur.themes.length ? `<div class="chips-wrap">${cur.themes.map(t => `<span class="cchip on"><i></i>${esc(t)}</span>`).join('')}</div>` : ''}
+        <div class="field"><label for="adm-news-model">Model for this run</label><select id="adm-news-model"></select></div>
+        <div class="row-actions"><button class="btn" id="adm-news-run">${ic('intel')}Curate news now</button></div>
+        <p class="xs muted">Set <b>AI news curation</b> in the credentials panel to <code>manual</code> (button only) or <code>daily</code> (also runs with the 22:00 UTC job). The model sees headlines only and returns 20–30 picks with a one-line reason and the assets touched. Readers see them under the <b>AI picks</b> filter and marked in the feed.</p>
+        <details><summary class="sm dim" style="cursor:pointer">Feeds (${src.sources.length})</summary><div class="tbl" style="margin-top:8px"><table class="t"><thead><tr><th>Feed</th><th>Region</th><th class="num">Items</th><th>Status</th></tr></thead><tbody>${nw.sources.map(s => `<tr><td>${esc(s.name)}</td><td class="muted">${s.region}</td><td class="num">${s.count}</td><td>${s.error ? `<span class="badge error" title="${esc(s.error)}">failed</span>` : s.stale ? '<span class="badge stale">stale</span>' : '<span class="badge measured">ok</span>'}</td></tr>`).join('')}</tbody></table></div></details></div>`;
+      fillModelSelect($('#adm-news-model'));
+      $('#adm-news-run').onclick = async (e) => { const b = e.currentTarget; b.disabled = true; const old = b.innerHTML; b.innerHTML = `<span class="spin" style="width:12px;height:12px"></span>Curating…`; try { const r = await api('/admin/news-curate', { method: 'POST', headers: hdr(), body: JSON.stringify({ model: $('#adm-news-model').value || undefined }) }); toast(`${r.curated.picks.length} headlines curated`); loadNews(true); renderAdminNews(hdr); } catch (err) { toast(err.message); b.disabled = false; b.innerHTML = old; } };
+    } catch (e) { box.innerHTML = errorBox(e.message); }
+  }
+  async function renderAdminTv(hdr) {
+    const box = $('#adm-tv');
+    try {
+      const r = await api('/admin/tv', { headers: hdr() });
+      const row = (s = {}) => `<div class="tv-row"><input type="text" data-f="name" placeholder="Channel name" value="${esc(s.name || '')}" aria-label="Name"><input type="text" data-f="group" placeholder="Group" value="${esc(s.group || '')}" aria-label="Group" style="flex:0 1 110px"><input type="text" data-f="channel" placeholder="YouTube channel ID (UC…) or video ID" value="${esc(s.channel || s.video || '')}" aria-label="YouTube channel or video ID" class="mono"><button type="button" class="icon-btn sm" data-del aria-label="Remove">${ic('x')}</button></div>`;
+      box.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px"><p class="xs muted">${r.custom ? `Custom list saved ${fmt.ago(r.updatedAt)}.` : 'Showing the built-in list.'} Each entry embeds the channel's current live broadcast; a video ID embeds that video instead.</p><div id="tv-rows">${r.streams.map(row).join('')}</div><div class="row-actions"><button class="btn ghost" id="tv-add">Add channel</button><button class="btn" id="tv-save">Save channels</button><button class="btn ghost" id="tv-reset">Reset to defaults</button></div></div>`;
+      $('#tv-rows').onclick = e => { const b = e.target.closest('[data-del]'); if (b) b.closest('.tv-row').remove(); };
+      $('#tv-add').onclick = () => $('#tv-rows').insertAdjacentHTML('beforeend', row());
+      $('#tv-save').onclick = async () => { const streams = $$('#tv-rows .tv-row').map(r => { const g = (f) => $(`[data-f="${f}"]`, r).value.trim(); const id = g('channel'); return { name: g('name'), group: g('group') || 'Other', channel: /^UC/.test(id) ? id : '', video: /^UC/.test(id) ? '' : id }; }); try { await api('/admin/tv', { method: 'POST', headers: hdr(), body: JSON.stringify({ streams }) }); toast('Channels saved'); loadTv(); renderAdminTv(hdr); } catch (e) { toast(e.message); } };
+      $('#tv-reset').onclick = async () => { try { await api('/admin/tv', { method: 'POST', headers: hdr(), body: JSON.stringify({ reset: true }) }); toast('Channel list reset'); loadTv(); renderAdminTv(hdr); } catch (e) { toast(e.message); } };
+    } catch (e) { box.innerHTML = errorBox(e.message); }
+  }
+  async function renderAdminStore(hdr) {
+    const box = $('#adm-store'); if (!box) return;
+    try {
+      const st = await api('/admin/store', { headers: hdr() });
+      box.innerHTML = `<div class="kv"><dt>Persistent store</dt><dd class="${st.persistent ? 'up' : 'warn-c'}">${esc(st.backend)}${st.persistent ? '' : ' (not persistent)'}</dd><dt>Round trip</dt><dd>${st.roundTrip && st.roundTrip.ok ? `ok · ${st.roundTrip.ms} ms` : `<span class="down">${esc((st.roundTrip && st.roundTrip.error) || st.error || 'failed')}</span>`}</dd><dt>Stored histories</dt><dd>${st.histories}</dd><dt>Daily snapshots</dt><dd>${st.snapshots.length ? `${st.snapshots.length} (latest ${esc(st.snapshots[st.snapshots.length - 1])})` : '0'}</dd><dt>Archived readings</dt><dd>${st.readings}</dd></div>
+        <div class="row-actions" style="margin-top:10px"><button class="btn ghost" id="adm-persist">${ic('download')}Store collected data now</button></div>
+        <p class="xs muted" style="margin-top:8px">Histories, the daily snapshot, AI readings, curated news, channel lists and encrypted credentials live in the store (${esc(st.backend)}). The nightly job refreshes them; this button runs the same step immediately.</p>`;
+      $('#adm-persist').onclick = async (e) => { const b = e.currentTarget; b.disabled = true; try { const r = await api('/admin/persist', { method: 'POST', headers: hdr() }); toast(`Stored ${r.histories.persisted} histories · snapshot ${r.snapshot.snapshot}`); renderAdminStore(hdr); } catch (err) { toast(err.message); } finally { b.disabled = false; } };
+    } catch (e) { box.innerHTML = errorBox(e.message); }
   }
 
   /* ═════════════════════ navigation & boot ═════════════════════ */
@@ -728,6 +836,8 @@
   (async () => {
     try { await loadCore(); } catch (e) { $('#ticker-inner').innerHTML = `<span class="down">Quotes unavailable: ${esc(e.message)}</span>`; $('#view-overview').innerHTML = errorBox(`The API could not be reached (${e.message}). Check that the server is running and can reach the data sources.`); return; }
     show(location.hash.slice(1) || 'overview');
+    loadNews(); loadTv();
+    setInterval(() => { if (!(SNAP && !apiBase)) loadNews(); }, 10 * 60000);
     setInterval(async () => { if (SNAP && !apiBase) return; try { await loadCore(); if (state.view === 'monitor') drawMonTable(); } catch (e) {} }, 60000);
   })();
 })();

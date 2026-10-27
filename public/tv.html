@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Live TV · Capital Flow Terminal</title>
+<meta name="robots" content="noindex">
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #07090d; color: #e6ebf2; font: 13px/1.4 'IBM Plex Sans', system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #10141c; border-bottom: 1px solid #20283a; }
+  header b { font-size: 13px; white-space: nowrap; }
+  select { flex: 1 1 auto; max-width: 420px; height: 32px; background: #151a24; color: inherit; border: 1px solid #2c3549; border-radius: 7px; padding: 0 8px; font: inherit; }
+  a { color: #a2aec0; font-size: 12px; white-space: nowrap; margin-left: auto; }
+  .frame { flex: 1 1 auto; min-height: 0; background: #000; }
+  iframe { width: 100%; height: 100%; border: 0; display: block; }
+  .msg { padding: 24px; color: #a2aec0; text-align: center; }
+</style>
+</head>
+<body>
+<header><b>Live TV</b><select id="sel" aria-label="Channel"></select><a id="yt" href="#" target="_blank" rel="noopener">Open on YouTube ↗</a></header>
+<div class="frame" id="frame"><div class="msg">Loading channel list…</div></div>
+<script>
+(async () => {
+  const q = new URLSearchParams(location.search); let cur = q.get('c');
+  let streams = [];
+  try { const r = await fetch('/api/tv/streams'); const j = await r.json(); streams = j.streams || []; } catch (e) {}
+  if (!streams.length) { document.getElementById('frame').innerHTML = '<div class="msg">Could not load the channel list.</div>'; return; }
+  const sel = document.getElementById('sel'); const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  sel.innerHTML = streams.map(s => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join('');
+  const play = () => { const s = streams.find(x => x.id === cur) || streams[0]; cur = s.id; sel.value = s.id; document.title = s.name + ' · Live TV'; document.getElementById('yt').href = s.watch; document.getElementById('frame').innerHTML = `<iframe src="${esc(s.embed.replace('mute=1', 'mute=0'))}" title="${esc(s.name)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`; history.replaceState(null, '', '?c=' + encodeURIComponent(s.id)); };
+  sel.onchange = () => { cur = sel.value; play(); };
+  play();
+})();
+</script>
+</body>
+</html>

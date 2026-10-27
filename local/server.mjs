@@ -41,7 +41,19 @@ const ASSETS = {
   },
 };
 
-const env = { ...process.env, CACHE: KV, ASSETS, APP_NAME: process.env.APP_NAME || 'Capital Flow Terminal', DEMO_MODE: process.env.DEMO_MODE || 'false' };
+// File-backed persistent store (local/.store/<key>.json) with the same interface as the Blob/KV backends
+const STORE_DIR = path.join(__dirname, '.store');
+const safe = (k) => k.replace(/[^A-Za-z0-9._-]/g, (c) => '_' + c.charCodeAt(0).toString(16));
+const unsafe = (k) => k.replace(/_([0-9a-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+const STORE = {
+  name: 'local-file',
+  async get(k) { const f = path.join(STORE_DIR, safe(k) + '.json'); return fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : null; },
+  async put(k, t) { fs.mkdirSync(STORE_DIR, { recursive: true }); fs.writeFileSync(path.join(STORE_DIR, safe(k) + '.json'), t); },
+  async del(k) { const f = path.join(STORE_DIR, safe(k) + '.json'); if (fs.existsSync(f)) fs.unlinkSync(f); },
+  async list(p) { if (!fs.existsSync(STORE_DIR)) return []; return fs.readdirSync(STORE_DIR).map(f => unsafe(f.replace(/\.json$/, ''))).filter(k => k.startsWith(p)).map(key => ({ key })); },
+};
+
+const env = { ...process.env, CACHE: KV, STORE, ASSETS, APP_NAME: process.env.APP_NAME || 'Capital Flow Terminal', DEMO_MODE: process.env.DEMO_MODE || 'false' };
 const PORT = Number(process.env.PORT || 8787);
 
 http.createServer(async (req, res) => {

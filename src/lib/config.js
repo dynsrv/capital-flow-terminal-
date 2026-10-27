@@ -6,6 +6,7 @@ export const CREDENTIAL_FIELDS = [
   { key: 'ANTHROPIC_API_KEY', label: 'Anthropic API key', group: 'AI', help: 'Enables AI explanations in Intelligence (signal, evidence, cause, impact, confidence, what to watch).', test: true },
   { key: 'ANTHROPIC_MODEL', label: 'Anthropic model', group: 'AI', help: 'Model ID used for explanations. Default: claude-sonnet-5-5.', secret: false, placeholder: 'claude-sonnet-5-5' },
   { key: 'AI_AUTO_REFRESH', label: 'Automatic AI refresh', group: 'AI', help: 'off: only when you press Refresh. daily: once a day after the US close. on-change: on the daily run, only if the regime, stress band or high-severity anomalies changed since the last reading.', secret: false, placeholder: 'off', options: ['off', 'daily', 'on-change'] },
+  { key: 'NEWS_AI_CURATION', label: 'AI news curation', group: 'AI', help: 'off: keyword rules only. manual: curate when you press the button in Admin. daily: also run with the daily job.', secret: false, placeholder: 'off', options: ['off', 'manual', 'daily'] },
   { key: 'EXA_API_KEY', label: 'Exa API key', group: 'Search', help: 'News search for AI citations via exa.ai.', test: true },
   { key: 'PARALLEL_API_KEY', label: 'Parallel API key', group: 'Search', help: 'News search for AI citations via parallel.ai.', test: true },
   { key: 'SEARCH_PROVIDER', label: 'Preferred search provider', group: 'Search', help: 'auto (Exa first, Parallel as fallback), exa, or parallel.', secret: false, placeholder: 'auto', options: ['auto', 'exa', 'parallel'] },
@@ -15,18 +16,21 @@ export const CREDENTIAL_FIELDS = [
   { key: 'MARKET_DATA_API_KEY', label: 'Market data key (Massive / Polygon)', group: 'Data', help: 'Optional. Reserved for a licensed real-time equities feed.', test: true },
 ];
 
+const ADMIN_DOC = 'admin/keys';
 export async function loadAdminKeys(env) {
+  if (env.__store) { try { return (await env.__store.getJSON(ADMIN_DOC, { secure: true })) || {}; } catch (e) { /* fall back */ } }
   if (!env.CACHE || typeof env.CACHE.get !== 'function') return {};
   try { return (await env.CACHE.get('admin:keys', 'json')) || {}; } catch (e) { return {}; }
 }
 
 export async function saveAdminKeys(env, updates) {
-  if (!env.CACHE || typeof env.CACHE.put !== 'function') throw new Error('KV binding CACHE is not configured; cannot persist credentials');
   const current = await loadAdminKeys(env);
   for (const [k, v] of Object.entries(updates)) {
     if (!CREDENTIAL_FIELDS.find(f => f.key === k)) continue;
     if (v === null || v === '') delete current[k]; else current[k] = String(v).trim();
   }
+  if (env.__store && env.__store.persistent) { await env.__store.putJSON(ADMIN_DOC, current, { secure: true }); return current; }
+  if (!env.CACHE || typeof env.CACHE.put !== 'function') throw new Error('No persistent store is configured; credentials cannot be saved');
   await env.CACHE.put('admin:keys', JSON.stringify(current));
   return current;
 }

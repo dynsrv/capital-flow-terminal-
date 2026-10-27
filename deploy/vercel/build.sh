@@ -7,6 +7,7 @@ rm -rf src_tmp && git clone --depth 1 --branch "$REF" "$REPO" src_tmp
 OUT=.vercel/output
 rm -rf "$OUT" && mkdir -p "$OUT/static" "$OUT/functions/api.func"
 cp -r src_tmp/public/. "$OUT/static/"
+(cd src_tmp && npm install --omit=dev --no-audit --no-fund --silent)
 npx --yes esbuild@0.24.2 src_tmp/api/index.js --bundle --format=esm --platform=browser --target=es2022 --outfile="$OUT/functions/api.func/index.js" --log-level=warning
 cat > "$OUT/functions/api.func/.vc-config.json" <<'JSON'
 { "runtime": "edge", "entrypoint": "index.js" }

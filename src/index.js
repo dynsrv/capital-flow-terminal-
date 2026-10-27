@@ -1,9 +1,10 @@
 // Capital Flow Terminal — Cloudflare Worker entry point (also runs under local/server.mjs).
 import { createCache } from './lib/cache.js';
+import { createStore } from './lib/store.js';
 import { getConfig, checkAdminAuth, saveAdminKeys, loadAdminKeys, CREDENTIAL_FIELDS, maskSecret } from './lib/config.js';
 import { json, error, WINDOWS } from './lib/util.js';
 import { ASSETS, CLASSES, SIZE_REFERENCES } from './universe.js';
-import { getQuotes, getHistory, getSizes, SOURCES } from './data.js';
+import { getQuotes, getHistory, getSizes, SOURCES, persistHistories } from './data.js';
 import * as A from './analytics.js';
 import { flows } from './flows.js';
 import { intelligence } from './ai.js';
@@ -11,12 +12,28 @@ import * as R from './risk.js';
 import * as I from './insights.js';
 import { testCredential } from './keytest.js';
 import { preCrash } from './precrash.js';
-import { getReading, refreshReading, scheduledRefresh, listModels } from './reading.js';
+import { getReading, refreshReading, scheduledRefresh, listModels, listReadings } from './reading.js';
+import { fetchNews, curateNews, getCurated, SOURCES as NEWS_SOURCES } from './news.js';
+import { getStreams, saveStreams, resetStreams, DEFAULT_STREAMS } from './tv.js';
 
 // CORS so the published artifact (or any front-end) can call this API.
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-headers': 'authorization,content-type' };
 
 function ctxFor(env, config) { return { env, config, cache: createCache(env) }; }
+function withStore(env) { if (!env.__store) { try { env.__store = createStore(env); } catch (e) { env.__store = null; } } return env; }
+
+// CDN cache policy for public GET routes (seconds). Admin, cron and POST routes are never cached.
+const CDN_TTL = [[/^\/quotes/, 30], [/^\/performance|^\/overview|^\/analytics\/regime|^\/news|^\/tv/, 120], [/^\/history/, 600], [/^\/analytics|^\/shock|^\/flows/, 300], [/^\/risk|^\/intel/, 300], [/^\/universe|^\/health/, 60]];
+function cdnHeaders(p, method) { if (method !== 'GET' || p.startsWith('/admin') || p.startsWith('/cron')) return {}; const hit = CDN_TTL.find(([re]) => re.test(p)); return hit ? { 'cache-control': `public, s-maxage=${hit[1]}, stale-while-revalidate=${hit[1] * 4}` } : {}; }
+
+/** Daily state snapshot: what the dashboard itself read today (quotes, regime, stress, anomalies, signals). */
+async function dailySnapshot(ctx) {
+  const store = ctx.env.__store; if (!store || !store.persistent) return { skipped: 'no persistent store' };
+  const [quotes, reg, st, an] = await Promise.all([getQuotes(ctx, null), A.regime(ctx), R.stressIndex(ctx).catch(() => null), A.anomalies(ctx, ASSETS.filter(a => a.cls !== 'macro' || a.id === 'VIX').map(a => a.id))]);
+  const day = new Date().toISOString().slice(0, 10);
+  await store.putJSON('snap/' + day, { day, savedAt: new Date().toISOString(), quotes: quotes.map(q => ({ id: q.id, price: q.price, pct1d: q.pct1d, asOf: q.asOf, source: q.source })), regime: { label: reg.label, score: reg.score }, stress: st ? { latest: st.latest, level: st.level } : null, anomalies: an.items.map(x => ({ id: x.id, z1: x.z1, z5: x.z5, severity: x.severity })) });
+  return { snapshot: day };
+}
 
 function parseIds(url, fallback) {
   const s = url.searchParams.get('ids');
@@ -25,14 +42,15 @@ function parseIds(url, fallback) {
 }
 
 async function handleApi(request, env, url) {
+  withStore(env);
   const config = await getConfig(env);
   const ctx = ctxFor(env, config);
   const p = url.pathname.replace(/^\/api/, '');
   const started = Date.now();
-  const wrap = (data) => json({ ok: true, demoMode: config.demoMode, generatedAt: new Date().toISOString(), ms: Date.now() - started, ...data });
+  const wrap = (data) => json({ ok: true, demoMode: config.demoMode, generatedAt: new Date().toISOString(), ms: Date.now() - started, ...data }, 200, cdnHeaders(p, request.method));
 
   try {
-    if (p === '/health') return wrap({ app: config.appName, sources: Object.values(SOURCES), adminConfigured: config.adminConfigured, keysConfigured: Object.fromEntries(Object.entries(config.keys).map(([k, v]) => [k, !!v])) });
+    if (p === '/health') return wrap({ app: config.appName, sources: Object.values(SOURCES), adminConfigured: config.adminConfigured, store: env.__store ? { backend: env.__store.name, persistent: env.__store.persistent } : null, keysConfigured: Object.fromEntries(Object.entries(config.keys).map(([k, v]) => [k, !!v])) });
 
     if (p === '/universe') return wrap({ assets: ASSETS.map(a => ({ id: a.id, name: a.name, cls: a.cls, region: a.region, kind: a.kind, unit: a.unit, source: a.source, symbol: a.symbol, freshness: a.freshness })), classes: CLASSES, sources: SOURCES, windows: Object.keys(WINDOWS), shockDrivers: A.SHOCK_DRIVERS });
 
@@ -71,6 +89,8 @@ async function handleApi(request, env, url) {
     if (p === '/risk/trend') return wrap(await R.trend(ctx, url.searchParams.get('id') || 'SPX', url.searchParams.get('window') || '1Y'));
     if (p === '/analytics/leaders') return wrap(await R.leaders(ctx, url.searchParams.get('anchor') || 'SPX'));
     if (p === '/intel/reading') return wrap(await getReading(ctx));
+    if (p === '/news') { const [feed, curated] = await Promise.all([fetchNews(ctx), getCurated(ctx)]); return wrap({ ...feed, curated, aiCuration: (config.keys.NEWS_AI_CURATION || 'off') !== 'off' }); }
+    if (p === '/tv/streams') return wrap(await getStreams(ctx));
     if (p === '/intel/explain') {
       // Model calls cost money: admin only. Visitors read the stored reading from /intel/reading.
       const auth = checkAdminAuth(request, env); if (!auth.ok) return error('Refreshing the AI reading requires the admin token', 401);
@@ -81,7 +101,8 @@ async function handleApi(request, env, url) {
       const secret = env.CRON_SECRET; const auth = request.headers.get('authorization') || '';
       const okCron = secret && auth === `Bearer ${secret}`; const okAdmin = checkAdminAuth(request, env).ok;
       if (!okCron && !okAdmin) return error('Unauthorised', 401);
-      return wrap(await scheduledRefresh(ctx));
+      const out = { histories: await persistHistories(ctx).catch(e => ({ error: e.message })), snapshot: await dailySnapshot(ctx).catch(e => ({ error: e.message })), ai: await scheduledRefresh(ctx).catch(e => ({ error: e.message })), news: (config.keys.NEWS_AI_CURATION || 'off') === 'daily' ? await curateNews(ctx).then(c => ({ curated: c.picks.length })).catch(e => ({ error: e.message })) : { skipped: 'news curation not scheduled' } };
+      return wrap(out);
     }
 
     if (p === '/shock/betas') {
@@ -104,6 +125,19 @@ async function handleApi(request, env, url) {
         return wrap({ saved: Object.keys(body) });
       }
       if (p === '/admin/models') return wrap(await listModels(config));
+      if (p === '/admin/news-curate' && request.method === 'POST') { const body = await request.json().catch(() => ({})); return wrap({ curated: await curateNews(ctx, { model: body.model }) }); }
+      if (p === '/admin/news-sources') return wrap({ sources: NEWS_SOURCES.map(({ id, name, region, cat, url }) => ({ id, name, region, cat, url })) });
+      if (p === '/admin/tv' && request.method === 'GET') return wrap({ ...(await getStreams(ctx)), defaults: DEFAULT_STREAMS });
+      if (p === '/admin/tv' && request.method === 'POST') { const body = await request.json().catch(() => ({})); return wrap(body.reset ? await resetStreams(ctx) : await saveStreams(ctx, body.streams)); }
+      if (p === '/admin/readings') return wrap({ readings: await listReadings(env) });
+      if (p === '/admin/store') {
+        const st = env.__store; if (!st) return wrap({ backend: 'none', persistent: false });
+        const probe = { t: Date.now() }; let roundTrip = null, err = null;
+        try { const t = Date.now(); await st.putJSON('_probe', probe); const back = await st.getJSON('_probe'); roundTrip = { ms: Date.now() - t, ok: back && back.t === probe.t }; await st.del('_probe'); } catch (e) { err = e.message; }
+        const [hist, snaps, readings] = await Promise.all([st.list('hist/').catch(() => []), st.list('snap/').catch(() => []), st.list('ai/archive/').catch(() => [])]);
+        return wrap({ backend: st.name, persistent: st.persistent, roundTrip, error: err, histories: hist.length, snapshots: snaps.map(x => x.key.replace('snap/', '')).sort().reverse().slice(0, 30), readings: readings.length });
+      }
+      if (p === '/admin/persist' && request.method === 'POST') return wrap({ histories: await persistHistories(ctx), snapshot: await dailySnapshot(ctx) });
       if (p === '/admin/ai-refresh' && request.method === 'POST') {
         const body = await request.json().catch(() => ({}));
         return wrap({ reading: await refreshReading(ctx, { model: body.model, question: body.question, trigger: 'admin' }) });
@@ -148,11 +182,12 @@ export default {
 
   // Cron: warm the quote + history caches so page loads are fast and rate limits are respected.
   async scheduled(event, env, ctx) {
+    withStore(env);
     const config = await getConfig(env);
     const c = ctxFor(env, config);
     ctx.waitUntil((async () => {
       try { await getQuotes(c, null); await A.regime(c); } catch (e) { console.log('warm failed', e.message); }
-      try { if (new Date().getUTCHours() === 22 && new Date().getUTCMinutes() < 5) console.log('ai refresh', JSON.stringify(await scheduledRefresh(c))); } catch (e) { console.log('ai refresh failed', e.message); }
+      try { if (new Date().getUTCHours() === 22 && new Date().getUTCMinutes() < 5) { withStore(env); console.log('persist', JSON.stringify(await persistHistories(c))); console.log('snapshot', JSON.stringify(await dailySnapshot(c))); console.log('ai refresh', JSON.stringify(await scheduledRefresh(c))); } } catch (e) { console.log('daily job failed', e.message); }
     })());
   },
 };

@@ -20,8 +20,16 @@ export async function fingerprint(ctx) {
   return { regime: reg.label, stressBand: band, severe: sev, notable, latestDate, text: `${reg.label}|${band}|${sev.join(',')}|${notable.join(',')}` };
 }
 
-async function kvGet(env) { try { return env.CACHE && typeof env.CACHE.get === 'function' ? await env.CACHE.get(KEY, 'json') : null; } catch (e) { return null; } }
-async function kvPut(env, v) { if (!env.CACHE || typeof env.CACHE.put !== 'function') throw new Error('No key-value store bound; the reading cannot be saved'); await env.CACHE.put(KEY, JSON.stringify(v)); }
+async function kvGet(env) {
+  if (env.__store) { try { const v = await env.__store.getJSON('ai/reading'); if (v) return v; } catch (e) {} }
+  try { return env.CACHE && typeof env.CACHE.get === 'function' ? await env.CACHE.get(KEY, 'json') : null; } catch (e) { return null; }
+}
+async function kvPut(env, v) {
+  if (env.__store && env.__store.persistent) { await env.__store.putJSON('ai/reading', v); await env.__store.putJSON('ai/archive/' + v.generatedAt.replace(/[:.]/g, '-'), v); return; }
+  if (!env.CACHE || typeof env.CACHE.put !== 'function') throw new Error('No store is configured; the reading cannot be saved');
+  await env.CACHE.put(KEY, JSON.stringify(v));
+}
+export async function listReadings(env) { if (!env.__store) return []; const l = await env.__store.list('ai/archive/'); return l.map(x => x.key.replace('ai/archive/', '')).sort().reverse().slice(0, 60); }
 
 /** Describe how the current picture differs from the stored fingerprint. */
 function diffFingerprint(stored, now) {

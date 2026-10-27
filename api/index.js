@@ -26,7 +26,8 @@ async function upstashKV() {
 let kvPromise;
 export default async function handler(request) {
   kvPromise ||= upstashKV().then(k => k || KV).catch(() => KV);
-  const env = { ...process.env, CACHE: await kvPromise, APP_NAME: process.env.APP_NAME || 'Capital Flow Terminal', DEMO_MODE: process.env.DEMO_MODE || 'false' };
+  const env = { ...process.env, CACHE: await kvPromise, // BLOB_READ_WRITE_TOKEN (from process.env) selects the Vercel Blob persistent store
+ APP_NAME: process.env.APP_NAME || 'Capital Flow Terminal', DEMO_MODE: process.env.DEMO_MODE || 'false' };
   return worker.fetch(request, env, { waitUntil() {} });
 }
 

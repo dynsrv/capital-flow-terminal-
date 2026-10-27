@@ -17,7 +17,10 @@ number carries its source, freshness and as-of time, and failed sources are show
 | D. Cross-Asset Analytics | ✅ live | Correlation heatmap (7D–10Y), 30D-vs-1Y correlation shifts (sign flips), relative performance rebased to 100, rolling correlation for any pair |
 | E. AI Market Intelligence | ✅ measured + 🔑 AI (stored reading, admin/scheduled refresh) | z-score anomaly detection, 1987 / 2000 / 2008 pattern-signature resemblance; with an Anthropic key the model returns *Signal → Evidence → Possible Cause → Cross-Asset Impact → Confidence → What to Watch* with facts / historical relationships / hypotheses / scenarios separated and news citations (Exa or Parallel key optional) |
 | F. Market Shock Simulator | ✅ live | Shock SPX / 10Y yield / BTC / gold / WTI / DXY; OLS betas and R² over 180D–10Y; outcomes labelled scenario estimates |
-| Admin | ✅ | Token-protected page to store API keys (KV), override market-size references, view per-source status, clear cache |
+| News sidebar | ✅ | Global + Indonesian headlines on markets, finance and geopolitics from public RSS feeds (Google News EN/ID queries, MarketWatch, BBC Business, Al Jazeera, CNBC Indonesia, Antara), keyword-classified, filterable by region and category; optional AI curation (20–30 picks with a one-line reason and assets touched) run from Admin or by the nightly job |
+| Live TV | ✅ | Sidebar player for Bloomberg Television, Yahoo Finance, CNBC, IDX Channel, KompasTV, CNA, Sky, Al Jazeera, DW, France 24 (YouTube live embeds, muted). Maximize to a full-screen modal or pop out to its own window (`/tv.html`). Admin can edit the channel list |
+| Persistent store | ✅ | Everything collected is kept: daily price histories (`hist/*`), a daily snapshot of performance/regime/stress/anomalies (`snap/YYYY-MM-DD`), AI readings (+ archive), curated news, channel list and AES-GCM-encrypted admin credentials. Backends: Vercel Blob → Cloudflare KV → local file → memory |
+| Admin | ✅ | Token-protected page: API keys with Test buttons, AI reading refresh with model choice, news curation, TV channel editor, store status + "store collected data now", market-size overrides, per-source status, clear cache |
 
 ## Data sources
 
@@ -29,7 +32,9 @@ number carries its source, freshness and as-of time, and failed sources are show
 | gold-api.com | none | spot gold and silver | near real-time |
 | U.S. EIA | optional `EIA_API_KEY` | official WTI / Brent / Henry Hub spot overlay | end-of-day |
 | Anthropic API | optional `ANTHROPIC_API_KEY` | AI explanations | — |
-| Exa / Parallel | optional `SEARCH_API_KEY` + `SEARCH_PROVIDER` | news citations for the AI module | — |
+| Exa / Parallel | optional `EXA_API_KEY` / `PARALLEL_API_KEY` + `SEARCH_PROVIDER` | news citations for the AI module | — |
+| Public RSS (Google News, MarketWatch, BBC, Al Jazeera, CNBC Indonesia, Antara) | none | news sidebar | 10-minute cache |
+| YouTube live embeds | none | TV sidebar | live |
 
 Reference aggregates (SIFMA Capital Markets Fact Book 2026 ed., World Gold Council above-ground stock) are stored
 in `src/universe.js` with source and as-of, and can be overridden in Admin.
@@ -42,7 +47,8 @@ cp .dev.vars.example .dev.vars      # set ADMIN_TOKEN at least
 node local/server.mjs               # → http://localhost:8787   (Node ≥ 18, zero dependencies)
 ```
 
-`local/server.mjs` runs the Worker in Node with an in-memory KV shim persisted to `local/.kv.json`.
+`local/server.mjs` runs the Worker in Node with an in-memory KV shim persisted to `local/.kv.json` and a file-backed
+persistent store in `local/.store/` (same interface as Vercel Blob / Cloudflare KV in production).
 Or, with wrangler: `npm install && npm run dev`.
 
 Smoke test: `node local/check.mjs` hits every API route and reports source status.
@@ -57,7 +63,7 @@ Two ways to deploy:
 1. **Git-linked (recommended once the Vercel GitHub integration is installed):** import `dynsrv/capital-flow-terminal-` in the Vercel dashboard; zero config — Vercel detects `api/` and `public/` and reads `vercel.json`.
 2. **Bootstrap build (what is deployed now, no GitHub integration needed):** `deploy/vercel/build.sh` clones this repo at build time and emits a Build Output API bundle. Redeploy from the Vercel dashboard ("Redeploy" on the latest deployment) or push the two files in `deploy/vercel/` with `vercel deploy --prod`. The build always pulls the latest `main`.
 
-Environment variables (Vercel → Settings → Environment Variables): `ADMIN_TOKEN` (set), `CRON_SECRET` (set; Vercel sends it on the daily `/api/cron/refresh` call), `DEMO_MODE=false`, plus any optional keys from the table above. Add `KV_REST_API_URL` / `KV_REST_API_TOKEN` (Upstash Redis via the Vercel Marketplace) to make the cache and Admin-entered keys persist across function instances; without it the cache is per-instance memory and Admin keys should be set as environment variables instead.
+Environment variables (Vercel → Settings → Environment Variables): `ADMIN_TOKEN` (set), `CRON_SECRET` (set; Vercel sends it on the daily `/api/cron/refresh` call), `DEMO_MODE=false`, plus any optional keys from the table above. `BLOB_READ_WRITE_TOKEN` is injected by the linked private Blob store and is the persistent store (histories, snapshots, AI readings, curated news, channels, encrypted admin keys). `STORE_SECRET` (optional) keys the credential encryption; it falls back to `ADMIN_TOKEN`. The daily cron (`0 22 * * *`, in `vercel.json` and the bootstrap `config.json`) calls `/api/cron/refresh`, which re-persists histories, writes the day's snapshot, refreshes the AI reading if `AI_AUTO_REFRESH` is `daily`/`on-change`, and curates news if `NEWS_AI_CURATION` is `daily`. Public GET routes send `s-maxage` headers so Vercel's CDN absorbs repeat traffic; admin and cron routes are `no-store`.
 
 ## Deploy to Cloudflare Workers
 
@@ -102,6 +108,11 @@ GET  /api/intel/anomalies
 GET  /api/intel/patterns
 POST /api/intel/explain          { ids?, question? }
 GET  /api/shock/betas?driver=UST10Y&window=1Y&ids=…
+GET  /api/news                   headlines + curated picks (if any)
+GET  /api/tv/streams
+GET  /api/intel/reading, /api/intel/precrash, /api/risk/*
+GET  /api/cron/refresh           (Bearer CRON_SECRET or admin) persist + snapshot + AI/news refresh
+POST /api/admin/ai-refresh, /api/admin/news-curate, /api/admin/persist; GET/POST /api/admin/tv; GET /api/admin/store, /api/admin/models, /api/admin/readings, /api/admin/news-sources
 GET/POST /api/admin/keys, /api/admin/sizes, /api/admin/status, POST /api/admin/cache/clear   (Bearer ADMIN_TOKEN)
 ```
 
@@ -111,7 +122,7 @@ Every quote object carries `source`, `freshness` (`realtime | delayed | eod | we
 ## Architecture
 
 ```
-public/              static terminal UI (vanilla JS + ECharts, dark/light, responsive)
+public/              static terminal UI (vanilla JS + ECharts, dark/light, responsive); tv.html = pop-out player
 src/index.js         Worker: router, admin, cron warm-up
 src/universe.js      asset universe + reference market sizes (one place to add instruments)
 src/data.js          quote/history resolution, caching, EIA overlay, market-size computation
@@ -119,6 +130,11 @@ src/adapters/*.js    one file per source (yahoo, fred, coingecko, goldapi, eia)
 src/analytics.js     returns, vol, drawdown, correlation, rolling corr, regime, anomalies, OLS betas, crisis patterns
 src/flows.js         measured flow / liquidity series
 src/ai.js            Anthropic + Exa/Parallel integration for the intelligence module
+src/news.js          RSS aggregation, keyword classification, optional AI curation
+src/tv.js            live TV channel list (defaults + admin overrides)
+src/reading.js       stored AI reading, staleness fingerprint, scheduled refresh
+src/precrash.js      pre-crash condition checklists (1987, 2000, 2008, 2020, 2022)
+src/lib/store.js     persistent store: Vercel Blob / Cloudflare KV / injected / memory, AES-GCM for secrets
 src/lib/cache.js     KV or in-memory cache with stale-on-error
 src/lib/config.js    credential resolution (Admin KV > env)
 local/server.mjs     Node runner with KV shim
