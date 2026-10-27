@@ -909,3 +909,17 @@ body.rt-on .live { color: var(--up); }
   .top-actions { padding-left: 0; }
   #connect-btn::before { display: none; }
 }
+
+/* ───────── comment round: header status pills removed, logo white on black, aligned news filters ───────── */
+/* The pills stay in the DOM (hidden) so the phone "More" sheet can still show regime and stress. */
+.top-actions #regime-pill, .top-actions #stress-pill { display: none !important; }
+.topbar .logo { background: #000; color: #fff; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22); }
+:root[data-theme="light"] .topbar .logo { box-shadow: none; }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .topbar .logo { box-shadow: none; } }
+/* category chips span the same width as the region switch above, equal columns, same height */
+.side-filters .chip-row { display: flex; flex-wrap: nowrap; gap: 4px; }
+.side-filters .chip-row .chip { flex: 1 1 auto; min-width: 0; height: 30px; padding: 0 6px; letter-spacing: -.01em; display: inline-flex; align-items: center; justify-content: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 6px; }
+.side-filters .chip-row .chip[hidden] { display: none; }
+.side-filters .seg { padding: 3px; }
+.side-filters .seg button { height: 26px; }
+@media (max-width: 759px) { .side-filters .chip-row .chip { height: 36px; font-size: 11px; } }
