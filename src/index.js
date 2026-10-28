@@ -14,6 +14,7 @@ import { testCredential } from './keytest.js';
 import { preCrash } from './precrash.js';
 import { recentEpisodes } from './recent.js';
 import { worldBonds, creditMonitor } from './bonds.js';
+import { getOutlook, refreshOutlook, scheduledOutlook } from './outlook.js';
 import { currentAnomalies, scanAnomalies, scheduledScan, scanLog, anomalyMode, nextRun } from './anomscan.js';
 import { getReading, refreshReading, scheduledRefresh, listModels, listReadings } from './reading.js';
 import { fetchNews, curateNews, getCurated, creditNews, SOURCES as NEWS_SOURCES } from './news.js';
@@ -29,7 +30,7 @@ function ctxFor(env, config) { return { env, config, cache: createCache(env) }; 
 function withStore(env) { if (!env.__store) { try { env.__store = createStore(env); } catch (e) { env.__store = null; } } return env; }
 
 // CDN cache policy for public GET routes (seconds). Admin, cron and POST routes are never cached.
-const CDN_TTL = [[/^\/ui$/, 60], [/^\/quotes/, 30], [/^\/performance|^\/overview|^\/analytics\/regime|^\/news|^\/tv/, 120], [/^\/history/, 600], [/^\/analytics|^\/shock|^\/flows|^\/bonds|^\/credit/, 300], [/^\/risk|^\/intel/, 300], [/^\/universe|^\/health/, 60]];
+const CDN_TTL = [[/^\/ui$/, 60], [/^\/quotes/, 30], [/^\/performance|^\/overview|^\/analytics\/regime|^\/news|^\/tv/, 120], [/^\/history/, 600], [/^\/analytics|^\/shock|^\/flows|^\/bonds|^\/credit/, 300], [/^\/intel\/outlook/, 120], [/^\/risk|^\/intel/, 300], [/^\/universe|^\/health/, 60]];
 function cdnHeaders(p, method) { if (method !== 'GET' || p.startsWith('/admin') || p.startsWith('/cron')) return {}; const hit = CDN_TTL.find(([re]) => re.test(p)); return hit ? { 'cache-control': `public, s-maxage=${hit[1]}, stale-while-revalidate=${hit[1] * 4}` } : {}; }
 
 /** Daily state snapshot: what the dashboard itself read today (quotes, regime, stress, anomalies, signals). */
@@ -105,6 +106,7 @@ async function handleApi(request, env, url) {
     if (p === '/intel/patterns') return wrap(await A.patterns(ctx));
     if (p === '/intel/precrash') return wrap(await preCrash(ctx));
     if (p === '/intel/recent') return wrap(await recentEpisodes(ctx));
+    if (p === '/intel/outlook') return wrap(await getOutlook(ctx));
     if (p === '/bonds/world') return wrap(await worldBonds(ctx));
     if (p === '/credit/monitor') return wrap(await creditMonitor(ctx));
     if (p === '/credit/news') return wrap(await creditNews(ctx));
@@ -140,7 +142,7 @@ async function handleApi(request, env, url) {
       const secret = env.CRON_SECRET; const auth = request.headers.get('authorization') || '';
       const okCron = secret && auth === `Bearer ${secret}`; const okAdmin = checkAdminAuth(request, env).ok;
       if (!okCron && !okAdmin) return error('Unauthorised', 401);
-      return streamJson(async () => ({ anomalies: await scheduledScan(ctx, 'us').catch(e => ({ error: e.message })), bonds: await Promise.all([worldBonds(ctx), creditMonitor(ctx)]).then(() => 'warmed').catch(e => ({ error: e.message })), usage: await U.compact(env.__store).catch(e => ({ error: e.message })), histories: await persistHistories(ctx).catch(e => ({ error: e.message })), snapshot: await dailySnapshot(ctx).catch(e => ({ error: e.message })), ai: await scheduledRefresh(ctx).catch(e => ({ error: e.message })), realtimeScan: rtSettings(config).enabled ? await scanPlans(ctx).then(x => x.summary).catch(e => ({ error: e.message })) : { skipped: 'real-time off' }, news: (config.keys.NEWS_AI_CURATION || 'off') === 'daily' ? await curateNews(ctx).then(c => ({ curated: c.picks.length })).catch(e => ({ error: e.message })) : { skipped: 'news curation not scheduled' } }), config.demoMode);
+      return streamJson(async () => ({ anomalies: await scheduledScan(ctx, 'us').catch(e => ({ error: e.message })), bonds: await Promise.all([worldBonds(ctx), creditMonitor(ctx)]).then(() => 'warmed').catch(e => ({ error: e.message })), outlook: await scheduledOutlook(ctx).catch(e => ({ error: e.message })), usage: await U.compact(env.__store).catch(e => ({ error: e.message })), histories: await persistHistories(ctx).catch(e => ({ error: e.message })), snapshot: await dailySnapshot(ctx).catch(e => ({ error: e.message })), ai: await scheduledRefresh(ctx).catch(e => ({ error: e.message })), realtimeScan: rtSettings(config).enabled ? await scanPlans(ctx).then(x => x.summary).catch(e => ({ error: e.message })) : { skipped: 'real-time off' }, news: (config.keys.NEWS_AI_CURATION || 'off') === 'daily' ? await curateNews(ctx).then(c => ({ curated: c.picks.length })).catch(e => ({ error: e.message })) : { skipped: 'news curation not scheduled' } }), config.demoMode);
     }
 
     if (p === '/shock/betas') {
@@ -168,6 +170,7 @@ async function handleApi(request, env, url) {
       if (p === '/admin/tv' && request.method === 'GET') return wrap({ ...(await getChannels(ctx)), defaults: DEFAULT_CHANNELS });
       if (p === '/admin/tv' && request.method === 'POST') { const body = await request.json().catch(() => ({})); return wrap(body.reset ? await resetChannels(ctx) : await saveChannels(ctx, body.channels)); }
       if (p === '/admin/realtime' && request.method === 'POST') { const body = await request.json().catch(() => ({})); const patch = {}; if (Array.isArray(body.priority)) patch.priority = body.priority; if (body.overrides) patch.overrides = body.overrides; return wrap({ routing: await saveRouting(ctx, patch) }); }
+      if (p === '/admin/outlook/refresh' && request.method === 'POST') { const body = await request.json().catch(() => ({})); return streamJson(async () => ({ outlook: await refreshOutlook(ctx, { model: body.model, trigger: 'admin' }) }), config.demoMode); }
       if (p === '/admin/anomalies' && request.method === 'GET') { const mode = anomalyMode(config); const log = await scanLog(ctx); return wrap({ mode, nextScan: nextRun(mode), log: log.slice(0, 20) }); }
       if (p === '/admin/anomalies/scan' && request.method === 'POST') return streamJson(async () => { const d = await scanAnomalies(ctx, 'admin'); return { scannedAt: d.scannedAt, count: d.items.length, changes: d.changes }; }, config.demoMode);
       if (p === '/admin/members' && request.method === 'GET') return wrap({ members: await listMembers(env), liveOn: rtSettings(config).enabled });

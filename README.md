@@ -129,6 +129,19 @@ Indonesia / EM / Global with a pressure or relief hint. Industry-level sectors n
 shown. FRED series are cached for 6 hours and warmed by the nightly job; a free FRED API key (Admin → API keys → Data) avoids the
 keyless rate limit.
 
+## Market outlook: five scenarios (Intelligence)
+
+The card at the top of the Intelligence page gives Bull / Base / Correction / Bear / Crash with a probability (summing to 100),
+a horizon, a price path, drivers, triggers, the historical episode it resembles, and gauges to watch; plus the stance,
+a themed conditions list (war and the Middle East, supply chains and chips, equities, crypto, bonds, credit, the Fed and
+inflation, the dollar and EM/Indonesia, oil, valuation and positioning), a comparison with the documented pre-conditions of
+1987/2000/2008/2020/2022, an Indonesia read, and what would change the view. It is written by the configured Anthropic model
+from the measured inputs (regime, anomalies, pre-crash checklist, stress, credit monitor, world bonds, 2020–2023 episode
+scores), up to five themed news searches (Exa or Parallel key) and the credit headlines. Probabilities are anchored on base
+rates and labelled as judgement, not forecast. `OUTLOOK_SCHEDULE` (daily, default) rewrites it with the nightly job; Admin →
+Intelligence → Market outlook refreshes it on demand. Each run is archived (`ai/outlook-archive/<day>`) and the card shows
+how the odds moved since the previous run and a daily track chart. API: `/api/intel/outlook`, `POST /api/admin/outlook/refresh`.
+
 ## Detected anomalies: how and when
 
 Each instrument's latest 1-day and 5-day change is compared with its own daily changes over roughly the last year (log

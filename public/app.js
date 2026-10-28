@@ -1011,6 +1011,7 @@
     const v = $('#view-intel'); v.innerHTML = loading('Scanning for anomalies and pattern resemblance…');
     const [an, pat, pre, rec] = await Promise.all([api('/intel/anomalies'), api('/intel/patterns'), api('/intel/precrash').catch(e => ({ error: e.message })), api('/intel/recent').catch(e => ({ error: e.message }))]);
     v.innerHTML = `
+      <div id="ol-box"></div>
       ${card({ icon: 'target', title: 'Detected anomalies', sub: `${an.items.length} instrument${an.items.length === 1 ? '' : 's'} flagged, each with a plain-language reading`, actions: `<span class="xs muted an-meta">${anomMeta(an)}</span><span class="badge measured">measured</span><span class="badge estimate">rules-based reading</span>`, body: '<div id="anom-list" style="display:flex;flex-direction:column;gap:12px"></div>', foot: esc(an.method) })}
       ${card({ icon: 'history', title: 'Before the peak: pre-crash conditions', sub: 'What was in place before the 1987, 2000 and 2008 peaks, and which of those conditions are present now', actions: '<span class="badge estimate">heuristic</span>', body: '<div id="pre-body" style="display:flex;flex-direction:column;gap:16px"></div>', foot: '<span id="pre-method"></span>' })}
       ${card({ icon: 'clock', title: '2020–2023: COVID crash and the inflation bear market', sub: 'Before the peak, during the fall and the impact, with today\'s data tested against each phase', actions: '<span class="badge measured">measured now</span><span class="badge estimate">documented history</span>', body: '<div id="rc-body"></div>', foot: '<span id="rc-method"></span>', id: 'rc-card' })}
@@ -1028,7 +1029,7 @@
         <div class="grid g-3 pre-grid">${pre.episodes.map(e => `<div class="episode"><div class="ep-h"><div><b>${esc(e.name)}</b><div class="xs muted mono">peak ${e.peak} → crash ${e.crash}</div></div><div class="ep-score"><b>${e.hits}<span>/${e.measured}</span></b><span class="xs muted">conditions present</span></div></div><span class="meter"><i style="width:${e.resemblance == null ? 0 : (e.resemblance * 100).toFixed(0)}%"></i></span><div class="xs muted">${esc(e.peakToCrash)} · ${esc(e.depth)}</div><p class="sm dim">${esc(e.story)}</p><div class="cond-list">${e.conditions.map(condRow).join('')}</div><div class="xs muted">${e.unmeasured ? `${e.unmeasured} condition${e.unmeasured === 1 ? '' : 's'} not measured by this dashboard · ` : 'All conditions measured · '}${e.sources.map(x => `<a href="${esc(x)}" target="_blank" rel="noopener">${esc(new URL(x).host.replace('www.', ''))}</a>`).join(' · ')}</div></div>`).join('')}</div>`;
       $('#pre-method').textContent = pre.method;
     }
-    renderRecent(rec);
+    renderRecent(rec); renderOutlook();
     $('#pattern-body').innerHTML = pat.items.map(p => `<div class="pattern"><div class="pattern-h"><b>${esc(p.name)}</b><span class="mono ${p.hits / p.total >= .5 ? 'warn-c' : 'muted'}">${p.hits}/${p.total}</span></div><span class="meter"><i style="width:${(p.resemblance * 100).toFixed(0)}%"></i></span><p class="sm dim">${esc(p.summary)}</p><div>${p.checks.map(c => `<div class="check ${c.hit ? 'hit' : 'miss'}"><i></i><span>${esc(c.label)}</span></div>`).join('')}</div><div class="xs">${p.sources.map(s => `<a href="${esc(s)}" target="_blank" rel="noopener">${esc(new URL(s).host.replace('www.', ''))}</a>`).join(' · ')}</div></div>`).join('');
     $('#ai-run').onclick = () => runAI({ model: $('#ai-model').value || undefined, question: $('#ai-q').value || undefined });
     loadReading();
@@ -1099,6 +1100,52 @@
     const sel = e.target; if (!sel || sel.tagName !== 'SELECT' || sel.disabled || sel.multiple || sel.dataset.native != null || !ddFine()) return;
     if (['Enter', ' ', 'ArrowDown', 'ArrowUp'].includes(e.key) && !e.altKey) { e.preventDefault(); ddOpen(sel); }
   }, true);
+
+  /* ───────── Market outlook: five scenarios ───────── */
+  const OL = { bull: ['Bull', 'New highs, contained volatility'], base: ['Base', 'Range-bound, drawdown under 10%'], correction: ['Correction', '10–20% fall, recovers in months'], bear: ['Bear', '20–30% fall over quarters'], crash: ['Crash', '30%+ or 20% in weeks, forced selling'] };
+  const olState = { open: null };
+  async function renderOutlook() {
+    const box = $('#ol-box'); if (!box) return;
+    let r; try { r = await api('/intel/outlook'); } catch (e) { box.innerHTML = ''; return; }
+    const isAdmin = !!state.admin.token && !(SNAP && !apiBase);
+    const o = r.outlook; const ai = o && o.ai;
+    const refreshBtn = isAdmin ? `<button class="btn ghost" id="ol-refresh">${ic('refresh')}Refresh outlook</button>` : '';
+    if (!ai) { box.innerHTML = card({ icon: 'compass', title: 'Market outlook: five scenarios', sub: 'Bull · Base · Correction · Bear · Crash, with likelihood and horizon', actions: refreshBtn, body: `<div class="ai-empty">${ic('compass')}<b>No outlook yet</b><p>${r.configured ? (isAdmin ? 'Press Refresh outlook to write the first one.' : 'The first outlook appears after the next scheduled run.') : 'An Anthropic key is needed (Admin → API keys → AI).'}</p></div>` }); wire(); return; }
+    const S = ai.scenarios; const maxP = Math.max(...S.map(x => x.probability));
+    const dl = (id) => { const d = o.changes && o.changes.deltas.find(x => x.id === id); return d && d.delta ? `<em class="ol-d ${d.delta > 0 ? 'up' : 'dn'}">${d.delta > 0 ? '▲' : '▼'} ${Math.abs(d.delta)}</em>` : ''; };
+    const dirCls = { supportive: 'ok', neutral: '', risk: 'bad' };
+    const cites = (arr) => (arr || []).map(x => esc(x).replace(/\[(\d+)\]/g, (m, n) => { const it = (o.news || []).find(k => k.n === Number(n)); return it ? `<a href="${esc(it.url)}" target="_blank" rel="noopener" class="ol-cite">[${n}]</a>` : m; }));
+    const open = olState.open || S.reduce((a, b) => (b.probability > a.probability ? b : a), S[0]).id;
+    const sc = (x) => `<button type="button" class="ol-s ${x.id} ${open === x.id ? 'open' : ''}" data-ol="${x.id}" aria-expanded="${open === x.id}"><span class="ol-p"><b>${x.probability}</b><small>%</small>${dl(x.id)}</span><span class="ol-bar"><i style="width:${Math.round(x.probability / maxP * 100)}%"></i></span><span class="ol-n">${OL[x.id][0]}</span><span class="ol-h">${esc(x.horizon || '')}</span></button>`;
+    const det = (x) => `<div class="ol-det ${x.id}"><div class="ol-det-h"><b>${OL[x.id][0]} · ${x.probability}%</b><span class="xs muted">${esc(OL[x.id][1])}${x.horizon ? ` · ${esc(x.horizon)}` : ''}</span></div>
+      <div class="ol-cols">
+        <div><span class="ol-l">Path</span><p>${cites([x.path])[0] || '—'}</p>${x.analog ? `<span class="ol-l">Resembles</span><p>${cites([x.analog])[0]}</p>` : ''}</div>
+        <div><span class="ol-l">What makes it likelier</span><ul>${cites(x.drivers).map(t => `<li>${t}</li>`).join('') || '<li class="muted">—</li>'}</ul></div>
+        <div><span class="ol-l">Triggers to watch</span><ul>${cites(x.triggers).map(t => `<li>${t}</li>`).join('') || '<li class="muted">—</li>'}</ul>${(x.watch || []).length ? `<span class="ol-l">Gauges</span><p class="xs">${cites(x.watch).join(' · ')}</p>` : ''}</div>
+      </div></div>`;
+    const stance = { 'risk-on': 'up', neutral: '', cautious: 'warn-c', defensive: 'down' }[ai.stance] || '';
+    box.innerHTML = card({ icon: 'compass', cls: 'ol-card', title: 'Market outlook: five scenarios', sub: 'Likelihood over the next 3–6 months, from the measured inputs on this page, the headlines of the day and the pre-conditions of past crashes', actions: `<span class="badge ${r.stale ? 'mid' : 'measured'}" title="${esc(o.generatedAt)}">${r.stale ? 'may be outdated' : 'current'}</span><span class="xs muted">${fmt.ago(o.generatedAt)} · ${esc(o.model || '')} · ${o.trigger === 'schedule' ? 'scheduled' : 'manual'}</span><span class="badge ai">AI judgement</span>${refreshBtn}`, body: `
+      <div class="ol-head"><div class="ol-stance ${stance}"><span>Stance</span><b>${esc(ai.stance || '—')}</b></div><p class="ol-hl">${cites([ai.headline])[0]}</p></div>
+      <div class="ol-row">${S.map(sc).join('')}</div>
+      <div id="ol-detail">${det(S.find(x => x.id === open))}</div>
+      <div class="ol-cond">${(ai.conditions || []).map(c => `<div class="ol-c ${dirCls[c.direction] || ''}" title="${esc(c.direction || '')}"><i></i><b>${esc(c.theme)}</b><span>${cites([c.read])[0]}</span></div>`).join('')}</div>
+      <div class="ol-foot">
+        <div><span class="ol-l">Versus past crashes</span><p>${cites([ai.history])[0] || '—'}</p></div>
+        <div><span class="ol-l">Indonesia</span><p>${cites([ai.indonesia])[0] || '—'}</p></div>
+        <div><span class="ol-l">Would change this view</span><ul>${cites(ai.wouldChangeMyMind).map(t => `<li>${t}</li>`).join('')}</ul><span class="ol-l">How the odds were set</span><p class="xs muted">${cites([ai.baseRateNote])[0] || ''}</p></div>
+      </div>
+      ${r.history && r.history.length > 1 ? `<div class="ol-hist"><span class="ol-l">Daily track</span><div id="ol-chart" class="ol-ch"></div></div>` : ''}
+      ${o.changes ? `<p class="xs muted">Since the previous outlook (${fmt.time(o.changes.previousAt)}): ${o.changes.deltas.filter(d => d.delta).map(d => `${OL[d.id][0]} ${d.from}% → ${d.to}%`).join(', ') || 'no change in the odds'}${o.changes.previousStance !== ai.stance ? ` · stance ${esc(o.changes.previousStance)} → ${esc(ai.stance)}` : ''}.</p>` : ''}`,
+      foot: 'Probabilities are the calibrated judgement of the model, anchored on base rates (a 10% correction about once a year, a 20% bear every 3–5 years, a crash once in 10–15 years), moved by the conditions measured on this page. Verified facts come from the inputs; the rest is interpretation, not a forecast. Rewritten daily when the schedule is on.' });
+    $$('#ol-box [data-ol]').forEach(b => b.onclick = () => { olState.open = b.dataset.ol; $$('#ol-box [data-ol]').forEach(x => { x.classList.toggle('open', x === b); x.setAttribute('aria-expanded', String(x === b)); }); $('#ol-detail').innerHTML = det(S.find(x => x.id === b.dataset.ol)); applyTitleCase($('#ol-detail')); });
+    if (r.history && r.history.length > 1) {
+      const T = tok(); const C = { bull: T.up, base: T.fg3, correction: T.warn, bear: T.c3, crash: T.down };
+      chart('#ol-chart', { grid: { left: 8, right: 8, top: 24, bottom: 6, containLabel: true }, legend: { top: 0, left: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: { color: T.fg2, fontSize: 11 * fs() } }, tooltip: { trigger: 'axis', valueFormatter: v => v + '%' }, xAxis: { type: 'category', data: r.history.map(h => h.generatedAt.slice(5, 10)), ...axis(T), splitLine: { show: false } }, yAxis: { type: 'value', max: 100, ...axis(T), axisLabel: { color: T.fg3, fontSize: 10.5 * fs(), formatter: v => v + '%' } }, series: SCEN.map(id => ({ name: OL[id][0], type: 'line', stack: 'p', areaStyle: { opacity: .55 }, lineStyle: { width: 1, color: C[id] }, itemStyle: { color: C[id] }, showSymbol: false, data: r.history.map(h => h.probabilities[id] || 0) })) });
+    }
+    wire();
+    function wire() { const b = $('#ol-refresh'); if (b) b.onclick = async () => { b.disabled = true; b.innerHTML = '<span class="spin" style="width:12px;height:12px"></span>Writing…'; try { await api('/admin/outlook/refresh', { method: 'POST', headers: { authorization: 'Bearer ' + state.admin.token, 'content-type': 'application/json' }, body: '{}' }); toast('Outlook refreshed'); renderOutlook(); } catch (e) { toast(e.message); b.disabled = false; b.innerHTML = `${ic('refresh')}Refresh outlook`; } }; }
+  }
+  const SCEN = ['bull', 'base', 'correction', 'bear', 'crash'];
 
   /* ───────── 2020–2023 episodes: before / during / impact ───────── */
   const condRowHtml = (c) => `<div class="cond ${c.hit === null ? 'na' : c.hit ? 'hit' : 'miss'}"><i></i><div class="cl"><b>${esc(c.label)}${c.basis ? ` <span class="badge estimate">${c.basis}</span>` : ''}</b><span class="then">Then: ${esc(c.then)}</span>${c.note ? `<span class="then">${esc(c.note)}</span>` : ''}</div><div class="cn">${esc(c.now)}</div></div>`;
@@ -1208,13 +1255,13 @@
           <section class="adm-sec" data-sec="keys">${card({ icon: 'key', title: 'API credentials', sub: 'Stored server-side, encrypted; values are never shown in full', body: '<div id="adm-fields"><div class="loading"><span class="spin"></span>Loading…</div></div>' })}</section>
           <section class="adm-sec" data-sec="members">${card({ icon: 'users', title: 'Members', sub: 'People who sign in with a PIN for live prices and every TV channel', body: '<div id="adm-members"></div>' })}</section>
           <section class="adm-sec" data-sec="realtime">${card({ icon: 'pulse', title: 'Real-time data routing', sub: 'Which provider prices each instrument. Switch real-time on and add keys in the Real-time group of the credentials panel', body: '<div id="adm-rt"><p class="dim">Unlock to view.</p></div>' })}</section>
-          <section class="adm-sec" data-sec="ai">${card({ icon: 'target', title: 'Anomaly scan', sub: 'How often Detected anomalies is refreshed, and what changed between scans', body: '<div id="adm-anom"></div>' })}<div class="adm-2">${card({ icon: 'intel', title: 'AI reading', sub: 'Generate or schedule the market reading shown on the Intelligence page', body: '<div id="adm-ai"><p class="dim">Unlock to manage.</p></div>' })}${card({ icon: 'news', title: 'News curation', sub: 'Optional: let a model rank and annotate the sidebar headlines', body: '<div id="adm-news"><p class="dim">Unlock to manage.</p></div>' })}</div></section>
+          <section class="adm-sec" data-sec="ai">${card({ icon: 'compass', title: 'Market outlook', sub: 'The five-scenario outlook at the top of the Intelligence page', body: '<div id="adm-outlook"></div>' })}${card({ icon: 'target', title: 'Anomaly scan', sub: 'How often Detected anomalies is refreshed, and what changed between scans', body: '<div id="adm-anom"></div>' })}<div class="adm-2">${card({ icon: 'intel', title: 'AI reading', sub: 'Generate or schedule the market reading shown on the Intelligence page', body: '<div id="adm-ai"><p class="dim">Unlock to manage.</p></div>' })}${card({ icon: 'news', title: 'News curation', sub: 'Optional: let a model rank and annotate the sidebar headlines', body: '<div id="adm-news"><p class="dim">Unlock to manage.</p></div>' })}</div></section>
           <section class="adm-sec" data-sec="usage">${card({ icon: 'db', title: 'Usage & API logs', sub: 'Every upstream API call, model token and storage operation, with an estimated cost', body: '<div id="adm-usage"><p class="dim">Unlock to view.</p></div>', cls: 'us-card' })}</section>
           <section class="adm-sec" data-sec="tv">${card({ icon: 'tv', title: 'Live TV channels', sub: 'Broadcaster HLS streams offered in the sidebar player', body: '<div id="adm-tv"><p class="dim">Unlock to edit.</p></div>' })}</section>
           <section class="adm-sec" data-sec="appearance">${card({ icon: 'book', title: 'Appearance', sub: 'Font and text size for everyone who opens the terminal', body: '<div id="adm-ui"><p class="dim">Unlock to change.</p></div>' })}</section>
           <section class="adm-sec" data-sec="data"><div class="adm-2">${card({ icon: 'db', title: 'Storage & cache', sub: 'Health of each delayed price source right now', body: '<div id="adm-status"><p class="dim">Unlock to view.</p></div>' })}${card({ icon: 'info', title: 'How data is handled', sub: 'Sources, keys, cache lifetimes and demo mode', body: '<div class="sm dim" style="display:flex;flex-direction:column;gap:8px"><p><b>No key needed:</b> Yahoo Finance (delayed), FRED, CoinGecko public, gold-api.com.</p><p><b>Optional:</b> FRED, EIA, CoinGecko (longer history), Anthropic (AI explanations), Exa or Parallel (news citations).</p><p><b>Cache:</b> quotes 60 s, histories 15 min, macro 1 h. If a source fails, the last value is served and flagged stale.</p><p><b>Demo mode</b> shows a permanent banner and every badge reads demo.</p></div>' })}</div>${card({ icon: 'layers', title: 'Market-size reference data', sub: 'Published aggregates behind the Overview treemap', body: '<div id="adm-sizes"><p class="dim">Unlock to edit.</p></div>', foot: 'Update when a newer SIFMA Fact Book or World Gold Council figure is published, and keep the source and as-of date.' })}</section>
         </div></div>`;
-    const lazy = { ai: () => renderAdminAnomalies(hdr), realtime: () => renderAdminRealtime(hdr), usage: () => renderAdminUsage(hdr), members: () => renderAdminMembers(hdr), home: () => renderAdminHome(hdr) };
+    const lazy = { ai: () => { renderAdminAnomalies(hdr); renderAdminOutlook(hdr); }, realtime: () => renderAdminRealtime(hdr), usage: () => renderAdminUsage(hdr), members: () => renderAdminMembers(hdr), home: () => renderAdminHome(hdr) };
     const opened = new Set();
     const openSec = (k) => { sec = k; try { sessionStorage.setItem('cft:admsec', k); } catch (e) {} $$('#adm-nav [data-sec]').forEach(b => b.classList.toggle('active', b.dataset.sec === k)); $$('.adm-sec').forEach(x => x.classList.toggle('active', x.dataset.sec === k)); const nb = $(`#adm-nav [data-sec="${k}"]`); if (nb && nb.scrollIntoView) nb.scrollIntoView({ block: 'nearest', inline: 'nearest' }); window.scrollTo({ top: 0 }); if (v.classList.contains('unlocked') && lazy[k] && (!opened.has(k) || k === 'home')) { opened.add(k); lazy[k](); } };
     state.admin.openSec = openSec;
@@ -1446,6 +1493,22 @@
     openProviderSockets();
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden && rt.timer) pollRt(); });
+
+  /* ───────── Admin: market outlook ───────── */
+  async function renderAdminOutlook(hdr) {
+    const box = $('#adm-outlook'); if (!box) return;
+    box.innerHTML = `<div class="loading"><span class="spin"></span>Loading…</div>`;
+    let r; try { r = await api('/intel/outlook'); } catch (e) { box.innerHTML = errorBox(e.message); return; }
+    const o = r.outlook;
+    box.innerHTML = `<div style="display:flex;flex-direction:column;gap:12px">
+      <div class="kv"><dt>Last outlook</dt><dd>${o ? `${fmt.time(o.generatedAt)} (${fmt.ago(o.generatedAt)}) · ${o.trigger === 'schedule' ? 'scheduled' : 'manual'}` : 'none yet'}</dd><dt>Model</dt><dd>${o ? esc(o.model) : '—'}</dd><dt>Stance · odds</dt><dd>${o ? `${esc(o.ai.stance)} · ${o.ai.scenarios.map(x => `${x.id} ${x.probability}%`).join(' · ')}` : '—'}</dd><dt>Schedule</dt><dd>${esc(r.schedule)} ${r.schedule === 'daily' ? '(22:00 UTC with the nightly job)' : ''}</dd><dt>Tokens</dt><dd>${o && o.usage ? `${o.usage.input_tokens} in · ${o.usage.output_tokens} out` : '—'}</dd></div>
+      <div class="field"><label for="adm-ol-model">Model for this refresh</label><select id="adm-ol-model"></select></div>
+      <div class="row-actions"><button class="btn" id="adm-ol-run">${ic('refresh')}Refresh outlook now</button><button class="btn ghost" data-go="intel">View on Intelligence</button></div>
+      <p class="xs muted">One model call (about 15–25k input tokens) plus up to five news searches per refresh. Set <b>Market outlook</b> in the credentials panel to off to stop the nightly rewrite. Every run is archived; the card shows how the odds moved.</p></div>`;
+    fillModelSelect($('#adm-ol-model'));
+    $('#adm-ol-run').onclick = async (e) => { const b = e.currentTarget; b.disabled = true; b.innerHTML = '<span class="spin" style="width:12px;height:12px"></span>Writing…'; try { const x = await api('/admin/outlook/refresh', { method: 'POST', headers: hdr(), body: JSON.stringify({ model: $('#adm-ol-model').value || undefined }) }); toast(`Outlook: ${x.outlook.ai.stance} · crash ${x.outlook.ai.scenarios.find(s => s.id === 'crash').probability}%`); renderAdminOutlook(hdr); } catch (err) { toast(err.message); b.disabled = false; b.innerHTML = `${ic('refresh')}Refresh outlook now`; } };
+    $$('#adm-outlook [data-go]').forEach(x => x.onclick = () => show(x.dataset.go));
+  }
 
   /* ───────── Admin: anomaly scan schedule ───────── */
   async function renderAdminAnomalies(hdr) {

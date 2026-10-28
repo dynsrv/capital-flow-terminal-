@@ -40,8 +40,9 @@ async function searchNews(config, query) {
   return { items: [], note: `Search failed (${errors.join('; ')})` };
 }
 
-export async function intelligence(ctx, { ids, question, model } = {}) {
-  const { config } = ctx;
+export { searchNews };
+/** The measured picture the models are allowed to reason from. */
+export async function measuredInputs(ctx, ids) {
   const universeIds = ids && ids.length ? ids : ['SPX', 'NDX', 'RUT', 'SX5E', 'NKY', 'SHCOMP', 'EEM', 'UST2Y', 'UST10Y', 'T10Y2Y', 'HYOAS', 'IGOAS', 'BTC', 'ETH', 'SOL', 'GOLD', 'SILVER', 'WTI', 'NATGAS', 'COPPER', 'DXY', 'USDJPY', 'VIX'];
   const [an, reg, pat, perf, pre] = await Promise.all([anomalies(ctx, universeIds), regime(ctx), patterns(ctx), performance(ctx, universeIds), preCrash(ctx).catch(() => null)]);
   const inputs = {
@@ -53,6 +54,12 @@ export async function intelligence(ctx, { ids, question, model } = {}) {
     stress: await stressIndex(ctx).then(x => ({ latest: x.latest, level: x.level })).catch(() => null),
     performance: perf.map(r => ({ id: r.id, name: r.name, price: r.price, pct1d: r.pct1d, d7: r.perf['7D'], d30: r.perf['30D'], ytd: r.perf.YTD, vol30: r.vol['30D'], dd1y: r.maxDrawdown1Y, freshness: r.freshness, asOf: r.asOf })),
   };
+  return { inputs, an, reg, pat };
+}
+
+export async function intelligence(ctx, { ids, question, model } = {}) {
+  const { config } = ctx;
+  const { inputs, an, reg, pat } = await measuredInputs(ctx, ids);
   const result = { inputs, anomalies: an, regime: reg, patterns: pat, ai: null, news: null };
 
   const apiKey = config.keys.ANTHROPIC_API_KEY;
