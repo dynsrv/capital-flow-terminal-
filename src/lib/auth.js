@@ -38,28 +38,39 @@ async function pinTaken(env, members, pin, exceptId) {
   return false;
 }
 
-/* ───────── sign-in throttle (per server instance) ───────── */
+/* ───────── sign-in throttle: 5 wrong PINs from one address → 15-minute lockout ─────────
+   Counted in the shared cache (Upstash Redis) when configured, so the limit holds across server instances;
+   otherwise per instance. */
 const tries = new Map();
 const ipOf = (req) => (req.headers.get('x-forwarded-for') || req.headers.get('x-real-ip') || req.headers.get('cf-connecting-ip') || 'local').split(',')[0].trim();
-function throttle(req) {
-  const ip = ipOf(req); const t = tries.get(ip) || { n: 0, until: 0, first: Date.now() };
+const LOCK_SEC = 15 * 60;
+async function throttle(env, req) {
+  const ip = ipOf(req); const kv = env.CACHE;
+  if (kv && typeof kv.incr === 'function' && kv.kind !== 'memory') {
+    try { const until = await kv.get('auth:lock:' + ip); if (until && Number(until) > Date.now()) return { blocked: true, retrySec: Math.ceil((Number(until) - Date.now()) / 1000) }; return { ip, kv }; } catch (e) {}
+  }
+  const t = tries.get(ip) || { n: 0, until: 0, first: Date.now() };
   if (t.until > Date.now()) return { blocked: true, retrySec: Math.ceil((t.until - Date.now()) / 1000) };
-  if (Date.now() - t.first > 15 * 60e3) { t.n = 0; t.first = Date.now(); }
+  if (Date.now() - t.first > LOCK_SEC * 1000) { t.n = 0; t.first = Date.now(); }
   return { ip, t };
 }
-function fail(ip, t) { t.n++; if (t.n >= 5) { t.until = Date.now() + 15 * 60e3; t.n = 0; t.first = Date.now(); } tries.set(ip, t); }
+async function fail(th) {
+  if (th.kv) { try { const n = await th.kv.incr('auth:tries:' + th.ip, LOCK_SEC); if (n >= 5) { await th.kv.put('auth:lock:' + th.ip, String(Date.now() + LOCK_SEC * 1000), { expirationTtl: LOCK_SEC }); await th.kv.delete('auth:tries:' + th.ip); } return; } catch (e) {} }
+  const t = th.t || { n: 0, until: 0, first: Date.now() }; t.n++; if (t.n >= 5) { t.until = Date.now() + LOCK_SEC * 1000; t.n = 0; t.first = Date.now(); } tries.set(th.ip, t);
+}
+async function cleared(th) { if (th.kv) { try { await th.kv.delete('auth:tries:' + th.ip); } catch (e) {} } else tries.delete(th.ip); }
 
 /** PIN sign-in. Returns { token, member, expiresAt } or throws an Error with .status. */
 export async function signIn(env, request, pin) {
   if (!secretOf(env)) throw Object.assign(new Error('Sign-in is not configured on this server'), { status: 503 });
-  const th = throttle(request);
+  const th = await throttle(env, request);
   if (th.blocked) throw Object.assign(new Error(`Too many attempts. Try again in ${Math.ceil(th.retrySec / 60)} min.`), { status: 429 });
   pin = String(pin || '').trim();
   const members = await loadMembers(env, true);
   let hit = null;
   if (validPin(pin)) for (const m of members) { if (m.active !== false && eq(await pinHash(env, m.salt, pin), m.hash)) { hit = m; break; } }
-  if (!hit) { fail(th.ip, th.t); throw Object.assign(new Error('That PIN is not recognised'), { status: 401 }); }
-  tries.delete(th.ip);
+  if (!hit) { await fail(th); throw Object.assign(new Error('That PIN is not recognised'), { status: 401 }); }
+  await cleared(th);
   const exp = Math.floor(Date.now() / 1000) + SESSION_DAYS * 86400;
   const body = `m1.${hit.id}.${hit.gen || 0}.${exp}`;
   const token = `${body}.${await hmac(secretOf(env), body)}`;

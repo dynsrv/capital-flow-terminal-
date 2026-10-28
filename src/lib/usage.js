@@ -39,7 +39,7 @@ export const SERVICE_INFO = {
   twelvedata: { name: 'Twelve Data', kind: 'Market data', unit: 'credits' }, fred: { name: 'FRED', kind: 'Public data' }, yahoo: { name: 'Yahoo Finance', kind: 'Public data' },
   coingecko: { name: 'CoinGecko', kind: 'Public data' }, eia: { name: 'EIA', kind: 'Public data' }, goldapi: { name: 'gold-api.com', kind: 'Public data' },
   defillama: { name: 'DefiLlama', kind: 'Public data' }, news: { name: 'News feeds (RSS)', kind: 'Public data' }, 'hls-relay': { name: 'Live TV relay', kind: 'Platform' },
-  'vercel-fn': { name: 'Function invocations', kind: 'Platform' }, 'vercel-blob': { name: 'Blob storage operations', kind: 'Platform' },
+  'vercel-fn': { name: 'Function invocations', kind: 'Platform' }, 'vercel-blob': { name: 'Blob storage operations', kind: 'Platform' }, postgres: { name: 'Postgres (Neon) queries', kind: 'Platform' },
 };
 export function serviceOf(host, path = '') {
   for (const [re, s] of HOSTS) if (re.test(host)) return s;
@@ -91,7 +91,7 @@ export function record(e) {
   a.n++; if (!e.status || e.status >= 400) a.err++; a.ms += e.ms || 0; a.bytes += e.bytes || 0; a.units += e.units || 1; a.cost += cost || 0;
   if (e.tag) a.tags[e.tag] = (a.tags[e.tag] || 0) + 1;
   const u = e.usage; if (u) { a.tin += u.input_tokens || 0; a.tout += u.output_tokens || 0; a.tcw += u.cache_creation_input_tokens || 0; a.tcr += u.cache_read_input_tokens || 0; }
-  if (svc !== 'vercel-fn' && svc !== 'vercel-blob' || (e.status && e.status >= 400)) {
+  if (svc !== 'vercel-fn' && svc !== 'vercel-blob' && svc !== 'postgres' || (e.status && e.status >= 400)) {
     state.log.push({ t: new Date().toISOString(), svc, op, st: e.status || 0, ms: Math.round(e.ms || 0), b: e.bytes || 0, units: e.units || 1, tag: e.tag || null, model: e.model || null,
       tin: u ? u.input_tokens || 0 : undefined, tout: u ? u.output_tokens || 0 : undefined, tcr: u ? u.cache_read_input_tokens || 0 : undefined, tcw: u ? u.cache_creation_input_tokens || 0 : undefined,
       cost: cost || 0, err: e.err ? scrub(e.err) : undefined, inst: INSTANCE });

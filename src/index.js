@@ -5,6 +5,7 @@ import { getConfig, checkAdminAuth, saveAdminKeys, loadAdminKeys, CREDENTIAL_FIE
 import { json, error, WINDOWS } from './lib/util.js';
 import { ASSETS, CLASSES, SIZE_REFERENCES } from './universe.js';
 import { getQuotes, getHistory, getSizes, SOURCES, persistHistories } from './data.js';
+import * as STG from './storage.js';
 import * as A from './analytics.js';
 import { flows } from './flows.js';
 import { intelligence } from './ai.js';
@@ -136,13 +137,13 @@ async function handleApi(request, env, url) {
     if (p === '/cron/anomalies') {
       const secret = env.CRON_SECRET; const auth = request.headers.get('authorization') || '';
       if (!(secret && auth === `Bearer ${secret}`) && !checkAdminAuth(request, env).ok) return error('Unauthorised', 401);
-      return streamJson(async () => ({ anomalies: await scheduledScan(ctx, 'asia') }), config.demoMode);
+      return streamJson(async () => { const r = { anomalies: await scheduledScan(ctx, 'asia').catch(e => ({ error: e.message })) }; await STG.markRun(ctx, 'asia-scan', r); return r; }, config.demoMode);
     }
     if (p === '/cron/refresh') {
       const secret = env.CRON_SECRET; const auth = request.headers.get('authorization') || '';
       const okCron = secret && auth === `Bearer ${secret}`; const okAdmin = checkAdminAuth(request, env).ok;
       if (!okCron && !okAdmin) return error('Unauthorised', 401);
-      return streamJson(async () => ({ anomalies: await scheduledScan(ctx, 'us').catch(e => ({ error: e.message })), bonds: await Promise.all([worldBonds(ctx), creditMonitor(ctx)]).then(() => 'warmed').catch(e => ({ error: e.message })), outlook: await scheduledOutlook(ctx).catch(e => ({ error: e.message })), usage: await U.compact(env.__store).catch(e => ({ error: e.message })), histories: await persistHistories(ctx).catch(e => ({ error: e.message })), snapshot: await dailySnapshot(ctx).catch(e => ({ error: e.message })), ai: await scheduledRefresh(ctx).catch(e => ({ error: e.message })), realtimeScan: rtSettings(config).enabled ? await scanPlans(ctx).then(x => x.summary).catch(e => ({ error: e.message })) : { skipped: 'real-time off' }, news: (config.keys.NEWS_AI_CURATION || 'off') === 'daily' ? await curateNews(ctx).then(c => ({ curated: c.picks.length })).catch(e => ({ error: e.message })) : { skipped: 'news curation not scheduled' } }), config.demoMode);
+      return streamJson(async () => { const r = { anomalies: await scheduledScan(ctx, 'us').catch(e => ({ error: e.message })), bonds: await Promise.all([worldBonds(ctx), creditMonitor(ctx)]).then(() => 'warmed').catch(e => ({ error: e.message })), outlook: await scheduledOutlook(ctx).catch(e => ({ error: e.message })), usage: await U.compact(env.__store).catch(e => ({ error: e.message })), histories: await persistHistories(ctx).catch(e => ({ error: e.message })), snapshot: await dailySnapshot(ctx).catch(e => ({ error: e.message })), ai: await scheduledRefresh(ctx).catch(e => ({ error: e.message })), realtimeScan: rtSettings(config).enabled ? await scanPlans(ctx).then(x => x.summary).catch(e => ({ error: e.message })) : { skipped: 'real-time off' }, news: (config.keys.NEWS_AI_CURATION || 'off') === 'daily' ? await curateNews(ctx).then(c => ({ curated: c.picks.length })).catch(e => ({ error: e.message })) : { skipped: 'news curation not scheduled' } }; r.housekeeping = await STG.housekeeping(ctx).catch(e => ({ error: e.message })); await STG.markRun(ctx, 'nightly', r); return r; }, config.demoMode);
     }
 
     if (p === '/shock/betas') {
@@ -189,6 +190,10 @@ async function handleApi(request, env, url) {
         const [hist, snaps, readings] = await Promise.all([st.list('hist/').catch(() => []), st.list('snap/').catch(() => []), st.list('ai/archive/').catch(() => [])]);
         return wrap({ backend: st.name, persistent: st.persistent, roundTrip, error: err, histories: hist.length, snapshots: snaps.map(x => x.key.replace('snap/', '')).sort().reverse().slice(0, 30), readings: readings.length });
       }
+      if (p === '/admin/storage' && request.method === 'GET') return json({ ok: true, ...(await STG.report(ctx)) }, 200, { 'cache-control': 'no-store' });
+      if (p === '/admin/storage/housekeeping' && request.method === 'POST') return streamJson(async () => STG.housekeeping(ctx), config.demoMode);
+      if (p === '/admin/storage/export' && request.method === 'GET') return new Response(JSON.stringify(await STG.exportAll(ctx)), { headers: { 'content-type': 'application/json', 'content-disposition': `attachment; filename="capital-flow-backup-${new Date().toISOString().slice(0, 10)}.json"`, 'cache-control': 'no-store' } });
+      if (p === '/admin/storage/import' && request.method === 'POST') return wrap(await STG.importAll(ctx, await request.json()));
       if (p === '/admin/persist' && request.method === 'POST') return wrap({ histories: await persistHistories(ctx), snapshot: await dailySnapshot(ctx) });
       if (p === '/admin/ai-refresh' && request.method === 'POST') {
         const body = await request.json().catch(() => ({}));
@@ -202,7 +207,7 @@ async function handleApi(request, env, url) {
       if (p === '/admin/sizes' && request.method === 'POST') { const body = await request.json(); await env.CACHE.put('admin:sizes', JSON.stringify(body)); return wrap({ saved: true }); }
       if (p === '/admin/cache/clear' && request.method === 'POST') {
         // KV has no cheap "delete all"; we invalidate by bumping nothing — instead list & delete our prefix.
-        let n = 0; try { let cursor; do { const l = await env.CACHE.list({ prefix: 'cache:', cursor }); for (const k of l.keys) { await env.CACHE.delete(k.name); n++; } cursor = l.list_complete ? null : l.cursor; } while (cursor); } catch (e) {}
+        let n = ctx.cache.clearLocal(); try { let cursor; do { const l = await env.CACHE.list({ prefix: 'cache:', cursor }); for (const k of l.keys) { await env.CACHE.delete(k.name); n++; } cursor = l.list_complete ? null : l.cursor; } while (cursor); } catch (e) {}
         return wrap({ cleared: n });
       }
       if (p === '/admin/status') {

@@ -329,3 +329,16 @@ local/server.mjs     Node runner with KV shim
 * Multi-factor sensitivity models (regularised regressions, regime-conditional betas)
 
 Data is for information only and not investment advice. Check each provider's terms before commercial use.
+
+## Storage, database and cache
+
+| Layer | Default | Upgrade (free tier) | Switches on when |
+|---|---|---|---|
+| Documents (histories, snapshots, AI reading and outlook, usage, scans, settings) | Vercel Blob | Neon Postgres, table `cft_docs` (created automatically) | `DATABASE_URL` or `POSTGRES_URL` is set |
+| Shared cache (quotes, histories, rate-limit state, PIN lockouts) | per-instance memory | Upstash Redis | `KV_REST_API_URL` + `KV_REST_API_TOKEN` (or `UPSTASH_REDIS_REST_*`) are set |
+
+- The cache is two-tier: per-instance memory first, then Redis. When a key expires, only one instance refreshes it (Redis lock); the others keep serving the previous copy for that moment.
+- When Postgres is added, a key missing in Postgres is read from Blob and copied over. The nightly housekeeping (and Admin → Data & storage → Run housekeeping) copies the rest and marks the migration done.
+- Retention (nightly): daily snapshots and daily usage 400 days, outlook archive 730 days, AI reading archive newest 120. Price histories and settings are kept.
+- Admin → Data & storage shows the store, cache, documents and bytes by area, retention, last runs, and has Download backup / Restore backup (credentials and member PINs are excluded).
+- The browser keeps a service worker (`/sw.js`): the app shell opens instantly, and public API reads fall back to the last good answer when the network fails (the page says so). Live prices, admin, sign-in and the TV relay are never cached.

@@ -103,6 +103,10 @@
   const SNAP = window.CFT_SNAPSHOT || null;
   let apiBase = store.get('cft:apiBase', '') || '';
   const snapKey = (path) => path.split('?')[0] + '?' + (path.split('?')[1] || '').split('&').filter(Boolean).sort().join('&');
+  // Offline: the service worker answered from its saved copy; say so once until the network is back.
+  let offlineShown = false;
+  function offlineNote() { if (offlineShown) return; offlineShown = true; toast('Connection lost: showing the last saved data'); }
+  if ('serviceWorker' in navigator && !SNAP && location.protocol === 'https:' && !apiBase) { window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); }); }
   async function api(path, opts = {}) {
     if (SNAP && !apiBase) {
       const hit = SNAP.data[snapKey(path)];
@@ -111,6 +115,7 @@
     }
     const r = await fetch((apiBase ? apiBase.replace(/\/$/, '') : '') + '/api' + path, opts);
     const j = await r.json().catch(() => ({ ok: false, error: `HTTP ${r.status}` }));
+    if (r.headers.get('x-cft-offline')) offlineNote(); else if (offlineShown && r.ok) { offlineShown = false; toast('Back online'); }
     if (!j.ok) throw new Error(j.error || `API error ${r.status}`);
     $('#demo-banner').hidden = !j.demoMode;
     return j;
@@ -1299,9 +1304,9 @@
           <section class="adm-sec" data-sec="usage">${card({ icon: 'db', title: 'Usage & API logs', sub: 'Every upstream API call, model token and storage operation, with an estimated cost', body: '<div id="adm-usage"><p class="dim">Unlock to view.</p></div>', cls: 'us-card' })}</section>
           <section class="adm-sec" data-sec="tv">${card({ icon: 'tv', title: 'Live TV channels', sub: 'Broadcaster HLS streams offered in the sidebar player', body: '<div id="adm-tv"><p class="dim">Unlock to edit.</p></div>' })}</section>
           <section class="adm-sec" data-sec="appearance">${card({ icon: 'book', title: 'Appearance', sub: 'Font and text size for everyone who opens the terminal', body: '<div id="adm-ui"><p class="dim">Unlock to change.</p></div>' })}</section>
-          <section class="adm-sec" data-sec="data"><div class="adm-2">${card({ icon: 'db', title: 'Storage & cache', sub: 'Health of each delayed price source right now', body: '<div id="adm-status"><p class="dim">Unlock to view.</p></div>' })}${card({ icon: 'info', title: 'How data is handled', sub: 'Sources, keys, cache lifetimes and demo mode', body: '<div class="sm dim" style="display:flex;flex-direction:column;gap:8px"><p><b>No key needed:</b> Yahoo Finance (delayed), FRED, CoinGecko public, gold-api.com.</p><p><b>Optional:</b> FRED, EIA, CoinGecko (longer history), Anthropic (AI explanations), Exa or Parallel (news citations).</p><p><b>Cache:</b> quotes 60 s, histories 15 min, macro 1 h. If a source fails, the last value is served and flagged stale.</p><p><b>Demo mode</b> shows a permanent banner and every badge reads demo.</p></div>' })}</div>${card({ icon: 'layers', title: 'Market-size reference data', sub: 'Published aggregates behind the Overview treemap', body: '<div id="adm-sizes"><p class="dim">Unlock to edit.</p></div>', foot: 'Update when a newer SIFMA Fact Book or World Gold Council figure is published, and keep the source and as-of date.' })}</section>
+          <section class="adm-sec" data-sec="data">${card({ icon: 'db', title: 'Storage, database and cache', sub: 'Where data lives, how much, how long it is kept, and when the nightly jobs last ran', actions: '<button class="btn ghost" id="stg-reload">' + ic('refresh') + 'Check now</button>', body: '<div id="adm-storage"><p class="dim">Unlock to view.</p></div>' })}<div class="adm-2">${card({ icon: 'db', title: 'Price source health', sub: 'Delayed price sources right now, and the cache', body: '<div id="adm-status"><p class="dim">Unlock to view.</p></div>' })}${card({ icon: 'info', title: 'How data is handled', sub: 'Sources, keys, cache lifetimes and demo mode', body: '<div class="sm dim" style="display:flex;flex-direction:column;gap:8px"><p><b>No key needed:</b> Yahoo Finance (delayed), FRED, CoinGecko public, gold-api.com.</p><p><b>Optional:</b> FRED, EIA, CoinGecko (longer history), Anthropic (AI explanations), Exa or Parallel (news citations).</p><p><b>Cache:</b> quotes 60 s, histories 15 min, macro 1 h. If a source fails, the last value is served and flagged stale.</p><p><b>Demo mode</b> shows a permanent banner and every badge reads demo.</p></div>' })}</div>${card({ icon: 'layers', title: 'Market-size reference data', sub: 'Published aggregates behind the Overview treemap', body: '<div id="adm-sizes"><p class="dim">Unlock to edit.</p></div>', foot: 'Update when a newer SIFMA Fact Book or World Gold Council figure is published, and keep the source and as-of date.' })}</section>
         </div></div>`;
-    const lazy = { ai: () => { renderAdminAnomalies(hdr); renderAdminOutlook(hdr); }, realtime: () => renderAdminRealtime(hdr), usage: () => renderAdminUsage(hdr), members: () => renderAdminMembers(hdr), home: () => renderAdminHome(hdr) };
+    const lazy = { data: () => renderAdminStorage(hdr), ai: () => { renderAdminAnomalies(hdr); renderAdminOutlook(hdr); }, realtime: () => renderAdminRealtime(hdr), usage: () => renderAdminUsage(hdr), members: () => renderAdminMembers(hdr), home: () => renderAdminHome(hdr) };
     const opened = new Set();
     const openSec = (k) => { sec = k; try { sessionStorage.setItem('cft:admsec', k); } catch (e) {} $$('#adm-nav [data-sec]').forEach(b => b.classList.toggle('active', b.dataset.sec === k)); $$('.adm-sec').forEach(x => x.classList.toggle('active', x.dataset.sec === k)); const nb = $(`#adm-nav [data-sec="${k}"]`); if (nb && nb.scrollIntoView) nb.scrollIntoView({ block: 'nearest', inline: 'nearest' }); window.scrollTo({ top: 0 }); if (v.classList.contains('unlocked') && lazy[k] && (!opened.has(k) || k === 'home')) { opened.add(k); lazy[k](); } };
     state.admin.openSec = openSec;
@@ -1422,6 +1427,43 @@
         try { await api('/admin/tv', { method: 'POST', headers: hdr(), body: JSON.stringify({ channels }) }); toast('Channels saved'); loadTv(); renderAdminTv(hdr); } catch (e) { toast(e.message); }
       };
       $('#tv-reset').onclick = async () => { try { await api('/admin/tv', { method: 'POST', headers: hdr(), body: JSON.stringify({ reset: true }) }); toast('Channel list reset'); loadTv(); renderAdminTv(hdr); } catch (e) { toast(e.message); } };
+    } catch (e) { box.innerHTML = errorBox(e.message); }
+  }
+  async function renderAdminStorage(hdr) {
+    const box = $('#adm-storage'); if (!box) return;
+    const rl = $('#stg-reload'); if (rl) rl.onclick = () => renderAdminStorage(hdr);
+    box.innerHTML = loading('Checking storage…');
+    try {
+      const r = await api('/admin/storage', { headers: hdr() });
+      const kb = (b) => b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : b >= 1024 ? Math.round(b / 1024) + ' KB' : (b || 0) + ' B';
+      const st = r.store, c = r.cache, inst = c.instance || {};
+      const hits = (inst.l1 || 0) + (inst.l2 || 0), tot = hits + (inst.miss || 0) + (inst.loads || 0);
+      const nameOf = { postgres: 'Postgres (Neon)', 'vercel-blob': 'Vercel Blob', 'cloudflare-kv': 'Cloudflare KV', memory: 'Memory only', 'upstash-redis': 'Upstash Redis' };
+      const runs = Object.entries(r.runs || {}).concat(r.housekeeping ? [['housekeeping', { at: r.housekeeping.at, ok: !r.housekeeping.error }]] : []);
+      const areas = Array.isArray(r.areas) ? r.areas : [];
+      const totB = areas.reduce((t, a) => t + (a.bytes || 0), 0), totN = areas.reduce((t, a) => t + (a.n || 0), 0);
+      const mig = st.backend === 'postgres' && st.fallback ? (st.migrated ? '<span class="badge measured">copied from Blob</span>' : '<span class="badge mid">copying from Blob</span>') : '';
+      box.innerHTML = `<div class="stg">
+        <div class="stg-tiles">
+          <div class="stg-t ${st.persistent ? 'ok' : 'bad'}"><span>Document store</span><b>${esc(nameOf[st.backend] || st.backend)}</b><small>${st.probe && st.probe.ok ? `write + read ${st.probe.ms} ms` : `<span class="down">${esc((st.probe && st.probe.error) || 'probe failed')}</span>`} ${mig}</small></div>
+          <div class="stg-t ${c.kind === 'memory' ? 'warn' : 'ok'}"><span>Shared cache</span><b>${esc(nameOf[c.kind] || c.kind)}</b><small>${c.kind === 'memory' ? 'per instance only' : `${c.keys != null ? c.keys + ' keys · ' : ''}${c.pingMs != null ? c.pingMs + ' ms' : ''}`}</small></div>
+          <div class="stg-t"><span>Stored data</span><b>${kb(totB)}</b><small>${totN} documents</small></div>
+          <div class="stg-t"><span>Cache hit rate (this instance)</span><b>${tot ? Math.round(hits / tot * 100) + '%' : '—'}</b><small>${inst.l1 || 0} memory · ${inst.l2 || 0} shared · ${inst.loads || 0} upstream${inst.lockWaits ? ` · ${inst.lockWaits} waits` : ''}</small></div>
+        </div>
+        ${r.upgrades && (r.upgrades.redis || r.upgrades.postgres) ? `<div class="callout">${ic('info')}<div><b>Recommended upgrades (free tiers).</b>${r.upgrades.redis ? `<p class="xs">${esc(r.upgrades.redis)}</p>` : ''}${r.upgrades.postgres ? `<p class="xs">${esc(r.upgrades.postgres)}</p>` : ''}</div></div>` : ''}
+        <div class="stg-grid">
+          <div class="tbl"><table class="t"><thead><tr><th>Area</th><th class="num">Docs</th><th class="num">Size</th><th>Last write</th></tr></thead><tbody>${areas.map(a => `<tr><td>${esc(a.label)} <span class="xs muted mono">${esc(a.prefix)}/</span></td><td class="num">${a.n}</td><td class="num">${kb(a.bytes)}</td><td class="xs muted">${a.latest ? fmt.ago(a.latest) : '—'}</td></tr>`).join('') || `<tr><td colspan="4" class="muted">${esc((r.areas && r.areas.error) || 'No documents yet')}</td></tr>`}</tbody></table></div>
+          <div class="stg-side">
+            <span class="ol-l">Retention</span><ul class="stg-list">${(r.retention || []).map(x => `<li><span>${esc(x.label)}</span><b class="mono">${esc(x.keep)}</b></li>`).join('')}<li><span>Price histories, settings</span><b class="mono">kept</b></li></ul>
+            <span class="ol-l">Last runs</span><ul class="stg-list">${runs.map(([k, v]) => `<li><span><i class="dot ${v.ok ? 'ok' : 'bad'}"></i>${esc({ nightly: 'Nightly job (22:00 UTC)', 'asia-scan': 'Asia anomaly scan (09:15 UTC)', housekeeping: 'Housekeeping' }[k] || k)}</span><b class="mono xs">${fmt.ago(v.at)}</b></li>`).join('') || '<li class="muted">No runs recorded yet</li>'}</ul>
+          </div>
+        </div>
+        <div class="row-actions"><button class="btn ghost" id="stg-hk">${ic('refresh')}Run housekeeping now</button><button class="btn ghost" id="stg-exp">${ic('download')}Download backup</button><label class="btn ghost" for="stg-imp">${ic('history')}Restore backup</label><input type="file" id="stg-imp" accept="application/json" hidden></div>
+        <p class="xs muted">Housekeeping runs with the nightly job: it finishes the copy into Postgres when one is connected and deletes documents past their retention. The backup holds every document except encrypted credentials and member PINs.</p>
+      </div>`;
+      $('#stg-hk').onclick = async (e) => { const b = e.currentTarget; b.disabled = true; try { const x = await api('/admin/storage/housekeeping', { method: 'POST', headers: hdr() }); const del = Object.values(x.pruned || {}).reduce((t, v) => t + (v.deleted || 0), 0); toast(`Housekeeping done · ${del} old documents removed${x.migration ? ` · copied ${x.migration.copied}` : ''}`); renderAdminStorage(hdr); } catch (err) { toast(err.message); b.disabled = false; } };
+      $('#stg-exp').onclick = async (e) => { const b = e.currentTarget; b.disabled = true; try { if (SNAP && !apiBase) throw new Error('Connect a live API to download a backup.'); const res = await fetch((apiBase ? apiBase.replace(/\/$/, '') : '') + '/api/admin/storage/export', { headers: hdr() }); if (!res.ok) throw new Error('Backup failed (' + res.status + ')'); const blob = await res.blob(); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `capital-flow-backup-${new Date().toISOString().slice(0, 10)}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); } catch (err) { toast(err.message); } finally { b.disabled = false; } };
+      $('#stg-imp').onchange = async (e) => { const f = e.target.files && e.target.files[0]; if (!f) return; try { const body = JSON.parse(await f.text()); const x = await api('/admin/storage/import', { method: 'POST', headers: hdr(), body: JSON.stringify(body) }); toast(`Restored ${x.restored} documents`); renderAdminStorage(hdr); } catch (err) { toast(err.message); } e.target.value = ''; };
     } catch (e) { box.innerHTML = errorBox(e.message); }
   }
   async function renderAdminStore(hdr) {

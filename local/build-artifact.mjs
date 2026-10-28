@@ -43,8 +43,8 @@ const js = fs.readFileSync(path.join(ROOT, 'public/app.js'), 'utf8');
 
 // Body-only content for the artifact skeleton: title + style + markup + scripts.
 const bodyInner = html.split('<body>')[1].split('</body>')[0]
-  .replace('<script src="/app.js"></script>', '')
-  .replace('<script src="/glossary.js"></script>', () => `<script>${fs.readFileSync(path.join(ROOT, 'public/glossary.js'), 'utf8')}</script>`)
+  .replace(/<script (defer )?src="\/app.js"><\/script>/, '')
+  .replace(/<script (defer )?src="\/glossary.js"><\/script>/, () => `<script>${fs.readFileSync(path.join(ROOT, 'public/glossary.js'), 'utf8')}</script>`)
   .replace('<div id="snapshot-banner"', '<div id="snapshot-banner"');
 const out = `<title>Capital Flow Terminal</title>
 <meta name="claude:viewport-fit-sides" content="cover">
