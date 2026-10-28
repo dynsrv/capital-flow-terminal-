@@ -1533,3 +1533,25 @@ table.t.wb-t td > div.xs.nowrap { white-space: nowrap; }
 @media (max-width: 900px) { .cm-ra-tiles { grid-template-columns: 1fr 1fr; } }
 .cm-news { max-height: 470px; }
 .cm-side .cm-news-card { flex: 0 0 auto; }
+
+/* ───────── Flows page: one column rhythm (wide 1.75fr | narrow 1fr) for every split row ───────── */
+#flow-grid .mini { gap: 10px; }
+#flow-grid .mini-item { padding: 10px 12px; }
+#flow-grid .mini-item .v { font-size: calc(16px * var(--fs, 1)); }
+.cm-top { grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: var(--gap); }
+.cm-overall { display: grid; grid-template-columns: minmax(200px, 240px) minmax(0, 1fr); gap: 8px 22px; align-items: start; }
+.cm-ov-l { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cm-ov-c { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px 10px; align-content: start; }
+.cm-ov-i { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cm-ov-i > span { font-size: calc(10.5px * var(--fs, 1)); color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cm-ov-i .pp { align-self: flex-start; }
+.cm-gauges { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.cm-g { padding: 9px 12px; }
+.cm-g b { font-size: calc(15px * var(--fs, 1)); }
+.cm-g span { font-size: calc(10.5px * var(--fs, 1)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* right column fills the row: the headlines card takes whatever height is left */
+.cm-side { height: 100%; }
+.cm-side .cm-news-card { flex: 1 1 0; min-height: 0; contain: size; }
+.cm-news { max-height: none; min-height: 0; }
+@media (max-width: 1100px) { .cm-top { grid-template-columns: minmax(0, 1fr); } .cm-side { height: auto; } .cm-side .cm-news-card { contain: none; flex: 0 0 auto; } .cm-news { max-height: 480px; } #flow-grid .mini { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; } }
+@media (max-width: 760px) { .cm-overall { grid-template-columns: minmax(0, 1fr); } #flow-grid .mini { grid-template-columns: minmax(0, 1fr) !important; } }
