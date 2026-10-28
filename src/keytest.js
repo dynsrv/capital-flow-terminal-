@@ -11,6 +11,7 @@ async function timed(fn) {
     const status = e.status; const raw = String(e.message || e);
     const hint = status === 401 || status === 403 ? 'The key was rejected (unauthorised). Check that it is copied in full and active.'
       : status === 429 ? 'The key works but the provider is rate-limiting requests right now.'
+      : status === 404 && /model/i.test(raw) ? 'That model ID was not found. Pick a model from the list (IDs use dashes, e.g. claude-sonnet-5-5).'
       : status === 400 ? 'The provider rejected the request format: ' + raw.replace(/^HTTP \d+ from [^:]+: /, '').slice(0, 140)
       : /abort/i.test(raw) ? 'The provider did not respond within the time limit.' : raw.slice(0, 180);
     return { ok: status === 429, ms: Date.now() - t, message: hint, status };
