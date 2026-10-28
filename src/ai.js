@@ -4,6 +4,7 @@
 // Without an Anthropic key the endpoint returns the measured inputs with an explicit "AI not configured" flag.
 import { fetchJSON } from './lib/util.js';
 import { callClaudeJson } from './lib/claude.js';
+import { intelModel } from './lib/config.js';
 import { anomalies, regime, patterns, performance } from './analytics.js';
 import { preCrash } from './precrash.js';
 import { stressIndex } from './risk.js';
@@ -72,7 +73,7 @@ export async function intelligence(ctx, { ids, question, model } = {}) {
 
   const userMsg = `INPUT DATA (measured):\n${JSON.stringify(inputs, null, 1)}\n\nNEWS SNIPPETS:\n${news.items.length ? news.items.map(n => `[${n.n}] ${n.title} (${n.published || 'n.d.'}) ${n.url}\n${n.snippet}`).join('\n\n') : '(none)'}\n\n${question ? `USER QUESTION: ${question}\n` : ''}Produce 2-5 findings, most significant first.`;
   try {
-    const r = await callClaudeJson(apiKey, { model: model || config.keys.ANTHROPIC_MODEL || 'claude-sonnet-5-5', system: SYSTEM, user: userMsg, tag: 'AI reading' });
+    const r = await callClaudeJson(apiKey, { model: model || intelModel(config), system: SYSTEM, user: userMsg, tag: 'AI reading' });
     const parsed = r.json; if (!Array.isArray(parsed.findings)) parsed.findings = [];
     result.ai = parsed; result.aiStatus = { configured: true, model: r.model, usage: r.usage };
   } catch (e) { result.aiStatus = { configured: true, error: e.message }; }

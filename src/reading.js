@@ -2,6 +2,7 @@
 // The result is saved with the model used, the trigger, and a fingerprint of the measured inputs so the
 // page can say when the reading is older than the data it describes.
 import { intelligence } from './ai.js';
+import { intelModel } from './lib/config.js';
 import { anomalies, regime } from './analytics.js';
 import { stressIndex } from './risk.js';
 import { fetchJSON } from './lib/util.js';
@@ -60,7 +61,7 @@ export async function refreshReading(ctx, { model, question, trigger = 'admin' }
   if (r.aiStatus.error) throw new Error(r.aiStatus.error);
   const fp = await fingerprint(ctx);
   const stored = {
-    generatedAt: new Date().toISOString(), trigger, model: r.aiStatus.model || model || ctx.config.keys.ANTHROPIC_MODEL || 'claude-sonnet-5-5',
+    generatedAt: new Date().toISOString(), trigger, model: r.aiStatus.model || model || intelModel(ctx.config),
     usage: r.aiStatus.usage || null, question: question || null,
     ai: r.ai, news: r.news && r.news.items ? { items: r.news.items, provider: r.news.provider || null } : null, newsNote: r.news && r.news.note || null,
     inputsSummary: { anomalies: r.inputs.anomalies.length, regime: r.inputs.regime.label, stress: r.inputs.stress, preCrashPresent: r.inputs.preCrashConditions ? r.inputs.preCrashConditions.lateCycleChecklist.present : [] },
@@ -87,5 +88,5 @@ export async function listModels(config) {
   const key = config.keys.ANTHROPIC_API_KEY; if (!key) return { models: [], note: 'Add an Anthropic key to list models.' };
   const j = await fetchJSON('https://api.anthropic.com/v1/models?limit=50', { tag: 'model list', headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' } });
   const models = (j.data || []).map(m => ({ id: m.id, name: m.display_name || m.id, created: m.created_at })).sort((a, b) => (b.created || '').localeCompare(a.created || ''));
-  return { models, current: config.keys.ANTHROPIC_MODEL || 'claude-sonnet-5-5' };
+  return { models, current: intelModel(config) };
 }

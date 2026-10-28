@@ -4,6 +4,7 @@
 
 export const CREDENTIAL_FIELDS = [
   { key: 'ANTHROPIC_API_KEY', label: 'Anthropic API key', group: 'AI', help: 'Enables AI explanations in Intelligence (signal, evidence, cause, impact, confidence, what to watch).', test: true },
+  { key: 'INTEL_MODEL', label: 'Market Intelligence model', group: 'AI', help: 'Model for the AI market reading and the five-scenario outlook. Default: claude-fable-5-1. News curation keeps the Anthropic model below.', secret: false, placeholder: 'claude-fable-5-1' },
   { key: 'ANTHROPIC_MODEL', label: 'Anthropic model', group: 'AI', help: 'Model ID used for explanations. Default: claude-sonnet-5-5.', secret: false, placeholder: 'claude-sonnet-5-5' },
   { key: 'AI_AUTO_REFRESH', label: 'Automatic AI refresh', group: 'AI', help: 'off: only when you press Refresh. daily: once a day after the US close. on-change: on the daily run, only if the regime, stress band or high-severity anomalies changed since the last reading.', secret: false, placeholder: 'off', options: ['off', 'daily', 'on-change'] },
   { key: 'NEWS_AI_CURATION', label: 'AI news curation', group: 'AI', help: 'off: keyword rules only. manual: curate when you press the button in Admin. daily: also run with the daily job.', secret: false, placeholder: 'off', options: ['off', 'manual', 'daily'] },
@@ -92,3 +93,6 @@ export function checkAdminAuth(request, env) {
   if (token !== env.ADMIN_TOKEN) return { ok: false, reason: 'Invalid admin token' };
   return { ok: true };
 }
+
+/** Model for Market Intelligence (AI reading, scenario outlook). */
+export const intelModel = (config) => (config && config.keys && config.keys.INTEL_MODEL) || 'claude-fable-5-1';

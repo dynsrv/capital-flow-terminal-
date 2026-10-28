@@ -10,6 +10,7 @@ import { recentEpisodes } from './recent.js';
 import { creditNews } from './news.js';
 import { callClaudeJson } from './lib/claude.js';
 import { getHistory } from './data.js';
+import { intelModel } from './lib/config.js';
 
 const DOC = 'ai/outlook';
 const ARCHIVE = 'ai/outlook-archive/';
@@ -111,7 +112,7 @@ export async function refreshOutlook(ctx, { model, trigger = 'admin' } = {}) {
   const [g, quant] = await Promise.all([gather(ctx), quantAnchors(ctx)]);
   const prev = await getDoc(ctx, DOC);
   const user = `QUANT ANCHORS (computed from daily closes):\n${anchorText(quant) || '(not available)'}\n\nMEASURED INPUTS (this dashboard):\n${JSON.stringify(g.inputs, null, 1)}\n\nCREDIT, BONDS AND EPISODE SCORES:\n${JSON.stringify(g.summary, null, 1)}\n\nHEADLINES (by theme):\n${g.news.length ? g.news.map(n => `[${n.n}] (${n.theme}) ${n.title} (${n.published || 'n.d.'}) ${n.url}\n${n.snippet || ''}`).join('\n\n') : '(no headlines available)'}${g.newsNotes.length ? `\n\nSearch notes: ${g.newsNotes.join('; ')}` : ''}\n\n${prev && prev.ai ? `PREVIOUS OUTLOOK (${prev.generatedAt}): probabilities ${prev.ai.scenarios.map(s => `${s.id} ${s.probability}%`).join(', ')}; stance ${prev.ai.stance}. Move them only for reasons visible in today's inputs or headlines, and say what moved in the headline if anything did.` : ''}\n\nWrite today's outlook.`;
-  const r = await callClaudeJson(key, { model: model || ctx.config.keys.ANTHROPIC_MODEL || 'claude-sonnet-5-5', system: SYSTEM, user, tag: 'market outlook', maxTokens: 20000 });
+  const r = await callClaudeJson(key, { model: model || intelModel(ctx.config), system: SYSTEM, user, tag: 'market outlook', maxTokens: 20000 });
   const ai = normalise(r.json);
   const changes = prev && prev.ai ? { previousAt: prev.generatedAt, previousStance: prev.ai.stance, deltas: ai.scenarios.map(s => { const p = prev.ai.scenarios.find(x => x.id === s.id); return { id: s.id, from: p ? p.probability : null, to: s.probability, delta: p ? s.probability - p.probability : null }; }) } : null;
   const doc = { generatedAt: new Date().toISOString(), trigger, model: r.model, usage: r.usage, ai, news: g.news.map(n => ({ n: n.n, title: n.title, url: n.url, theme: n.theme, published: n.published })), newsNotes: g.newsNotes, changes, quant, snapshot: { spx: (g.inputs.performance.find(p => p.id === 'SPX') || {}).price, vix: (g.inputs.performance.find(p => p.id === 'VIX') || {}).price, regime: g.inputs.regime.label, stress: g.inputs.stress, credit: g.summary.credit && g.summary.credit.overall } };
