@@ -1116,25 +1116,50 @@
     const dirCls = { supportive: 'ok', neutral: '', risk: 'bad' };
     const cites = (arr) => (arr || []).map(x => esc(x).replace(/\[(\d+)\]/g, (m, n) => { const it = (o.news || []).find(k => k.n === Number(n)); return it ? `<a href="${esc(it.url)}" target="_blank" rel="noopener" class="ol-cite">[${n}]</a>` : m; }));
     const open = olState.open || S.reduce((a, b) => (b.probability > a.probability ? b : a), S[0]).id;
-    // Probability ladder: one row per scenario, best to worst. Bars share one scale (0 to the next 10% above the largest), the value sits outside the bar.
+    // Scenario table: one row per scenario, best to worst. Likelihood bars share one scale; the S&P 500 and USD/IDR ranges
+    // sit on one axis per column with today's spot marked, so the rows read as a fan from firm to stressed.
     const scale = Math.ceil(maxP / 10) * 10 || 100;
-    const sc = (x) => `<button type="button" role="listitem" class="ol-s ${x.id} ${open === x.id ? 'open' : ''}" data-ol="${x.id}" aria-expanded="${open === x.id}" aria-label="${OL[x.id][0]} ${x.probability}%, ${esc(x.horizon || '')}"><span class="ol-lab"><span class="ol-n">${OL[x.id][0]}${dl(x.id)}</span><span class="ol-h">${esc(x.horizon || '')}</span></span><span class="ol-bar"><i style="width:${(x.probability / scale * 100).toFixed(1)}%"></i></span><b class="ol-v">${x.probability}<small>%</small></b></button>`;
+    const Q = o.quant || {};
+    const spotOf = (k) => (Q[k] && Q[k].spot) || (k === 'SPX' ? o.snapshot && o.snapshot.spx : null);
+    const horizonN = (h) => { const n = Math.max(0, ...(String(h || '').match(/\d+(?=\s*(?:-|–|to)?\s*\d*\s*month)/gi) || []).map(Number)); return n >= 5 ? 'm6' : 'm3'; };
+    const pctile = (k, move, h) => { const d = Q[k] && Q[k][horizonN(h)]; if (!d || !d.cdf) return null; let i = 0; while (i < 100 && d.cdf[i] < move) i++; return i; };
+    const field = { SPX: 'spx', USDIDR: 'usdidr' };
+    const dom = {}; for (const k of ['SPX', 'USDIDR']) { const sp = spotOf(k); const v = S.flatMap(x => x[field[k]] ? [x[field[k]].low, x[field[k]].high] : []).concat(sp ? [sp] : []); if (v.length) { const lo = Math.min(...v), hi = Math.max(...v), pad = (hi - lo) * .06 || hi * .02; dom[k] = [lo - pad, hi + pad]; } }
+    const pos = (k, v) => ((v - dom[k][0]) / (dom[k][1] - dom[k][0]) * 100).toFixed(1);
+    const nf = (k, v) => k === 'SPX' ? Math.round(v).toLocaleString('en-US') : Math.round(v / 10) * 10 >= 10000 ? Math.round(v).toLocaleString('en-US') : String(Math.round(v));
+    const rangeCell = (x, k) => {
+      const r = x[field[k]]; const sp = spotOf(k);
+      if (!r || !dom[k]) return `<span class="ol-rg na"><span class="ol-rg-t muted">—</span></span>`;
+      const mid = (r.low + r.high) / 2; const mv = sp ? (mid / sp - 1) * 100 : null;
+      const bad = k === 'SPX' ? mv < 0 : mv > 0; // a weaker rupiah is a higher USD/IDR
+      return `<span class="ol-rg"><span class="ol-rg-t"><b>${nf(k, r.low)}–${nf(k, r.high)}</b>${mv != null ? `<em class="${Math.abs(mv) < .5 ? '' : bad ? 'dn' : 'up'}">${mv > 0 ? '+' : ''}${mv.toFixed(1)}%</em>` : ''}</span><span class="ol-rg-b">${sp ? `<u style="left:${pos(k, sp)}%"></u>` : ''}<i style="left:${pos(k, r.low)}%;width:${Math.max(1.5, pos(k, r.high) - pos(k, r.low))}%"></i></span></span>`;
+    };
+    const ev = (k) => { const v = S.filter(x => x[field[k]]); if (v.length < 5) return null; return v.reduce((t, x) => t + x.probability / 100 * (x[field[k]].low + x[field[k]].high) / 2, 0); };
+    const evCell = (k) => { const e = ev(k), sp = spotOf(k); if (e == null) return '<span class="muted">—</span>'; const mv = sp ? (e / sp - 1) * 100 : null; const bad = k === 'SPX' ? mv < 0 : mv > 0; return `<span class="ol-rg-t"><b>${nf(k, e)}</b>${mv != null ? `<em class="${Math.abs(mv) < .5 ? '' : bad ? 'dn' : 'up'}">${mv > 0 ? '+' : ''}${mv.toFixed(1)}%</em>` : ''}</span>`; };
+    const sc = (x) => `<button type="button" role="row" class="ol-s ol-tr ${x.id} ${open === x.id ? 'open' : ''}" data-ol="${x.id}" aria-expanded="${open === x.id}">
+      <span class="ol-c1" role="cell"><i class="ol-dot"></i><span class="ol-n">${OL[x.id][0]}${dl(x.id)}</span><span class="ol-h">${esc(OL[x.id][1])}</span></span>
+      <span class="ol-c2" role="cell"><span class="ol-bar"><i style="width:${(x.probability / scale * 100).toFixed(1)}%"></i></span><b class="ol-v">${x.probability}<small>%</small></b></span>
+      <span class="ol-c3 mono" role="cell">${esc(x.horizon || '—')}</span>
+      <span class="ol-c4" role="cell">${rangeCell(x, 'SPX')}</span>
+      <span class="ol-c5" role="cell">${rangeCell(x, 'USDIDR')}</span>
+      <span class="ol-chev" aria-hidden="true">${ic('chev')}</span></button>`;
+    const fxLine = (x) => { const r = x.usdidr; const sp = spotOf('USDIDR'); if (!r) return ''; const mid = (r.low + r.high) / 2; const mv = sp ? (mid / sp - 1) * 100 : null; const pc = mv != null ? pctile('USDIDR', mv, x.horizon) : null; const d = Q.USDIDR && Q.USDIDR[horizonN(x.horizon)];
+      return `<span class="ol-l">USD/IDR ${nf('USDIDR', r.low)}–${nf('USDIDR', r.high)}</span><p>${r.why ? esc(r.why) : ''}${pc != null ? `<span class="ol-q">Midpoint ${mv > 0 ? '+' : ''}${mv.toFixed(1)}% vs spot ${nf('USDIDR', sp)}: ${mv >= 0 ? `a weaker rupiah than in ${pc}%` : `a firmer rupiah than in ${100 - pc}%`} of ${d.n === 126 ? '6' : '3'}-month periods since ${String(d.from).slice(0, 4)}.</span>` : ''}</p>`; };
     const det = (x) => `<div class="ol-det ${x.id}"><div class="ol-det-h"><b>${OL[x.id][0]} · ${x.probability}%</b><span class="xs muted">${esc(OL[x.id][1])}${x.horizon ? ` · ${esc(x.horizon)}` : ''}</span></div>
       <div class="ol-cols">
-        <div><span class="ol-l">Path</span><p>${cites([x.path])[0] || '—'}</p>${x.analog ? `<span class="ol-l">Resembles</span><p>${cites([x.analog])[0]}</p>` : ''}</div>
+        <div><span class="ol-l">Path</span><p>${cites([x.path])[0] || '—'}</p>${fxLine(x)}${x.analog ? `<span class="ol-l">Resembles</span><p>${cites([x.analog])[0]}</p>` : ''}</div>
         <div><span class="ol-l">What makes it likelier</span><ul>${cites(x.drivers).map(t => `<li>${t}</li>`).join('') || '<li class="muted">—</li>'}</ul></div>
         <div><span class="ol-l">Triggers to watch</span><ul>${cites(x.triggers).map(t => `<li>${t}</li>`).join('') || '<li class="muted">—</li>'}</ul>${(x.watch || []).length ? `<span class="ol-l">Gauges</span><p class="xs">${cites(x.watch).join(' · ')}</p>` : ''}</div>
       </div></div>`;
     const stance = { 'risk-on': 'up', neutral: '', cautious: 'warn-c', defensive: 'down' }[ai.stance] || '';
     box.innerHTML = card({ icon: 'compass', cls: 'ol-card', title: 'Market outlook: five scenarios', sub: 'Likelihood over the next 3–6 months, from the measured inputs on this page, the headlines of the day and the pre-conditions of past crashes', actions: `<span class="badge ${r.stale ? 'mid' : 'measured'}" title="${esc(o.generatedAt)}">${r.stale ? 'may be outdated' : 'current'}</span><span class="xs muted">${fmt.ago(o.generatedAt)} · ${esc(o.model || '')} · ${o.trigger === 'schedule' ? 'scheduled' : 'manual'}</span><span class="badge ai">AI judgement</span>${refreshBtn}`, body: `
       <div class="ol-hero ${stance}"><div class="ol-stance ${stance}"><span>Stance</span><b>${esc(ai.stance || '—')}</b><small>${esc(o.generatedAt.slice(0, 10))}</small></div><div class="ol-hl-w"><p class="ol-hl">${cites([ai.headline])[0]}</p><div class="ol-kpis"><span>P(fall ≥10%) <b>${S.filter(x => ['correction', 'bear', 'crash'].includes(x.id)).reduce((t, x) => t + x.probability, 0)}%</b></span><span>P(bear or crash) <b>${S.filter(x => ['bear', 'crash'].includes(x.id)).reduce((t, x) => t + x.probability, 0)}%</b></span><span>Most likely <b>${OL[S.reduce((a, b) => (b.probability > a.probability ? b : a), S[0]).id][0]}</b></span></div></div></div>
-      <div class="ol-main">
-        <div class="ol-viz">
-          <div class="ol-lad-h"><span>Likelihood</span><span class="mono">0–${Math.ceil(maxP / 10) * 10}%</span></div>
-          <div class="ol-lad" role="list">${S.map(sc).join('')}</div>
-        </div>
-        <div id="ol-detail" class="ol-stack">${S.map(x => `<div class="ol-pane ${open === x.id ? 'on' : ''}" data-pane="${x.id}">${det(x)}</div>`).join('')}</div>
+      <div class="ol-tbl" role="table" aria-label="Five scenarios with likelihood, horizon and price ranges">
+        <div class="ol-th" role="row"><span role="columnheader">Scenario</span><span role="columnheader">Likelihood <small class="mono">0–${scale}%</small></span><span role="columnheader">Horizon</span><span role="columnheader">S&amp;P 500${spotOf('SPX') ? ` <small class="mono">spot ${nf('SPX', spotOf('SPX'))}</small>` : ''}</span><span role="columnheader">USD/IDR${spotOf('USDIDR') ? ` <small class="mono">spot ${nf('USDIDR', spotOf('USDIDR'))}</small>` : ''}</span><span></span></div>
+        ${S.map(sc).join('')}
+        <div class="ol-tf" role="row"><span class="ol-c1" role="cell"><span class="ol-n">Probability-weighted</span><span class="ol-h">Σ likelihood × range midpoint</span></span><span class="ol-c2" role="cell"><span class="xs muted">P(fall ≥10%) <b class="mono">${S.filter(x => ['correction', 'bear', 'crash'].includes(x.id)).reduce((t, x) => t + x.probability, 0)}%</b></span></span><span class="ol-c3" role="cell"></span><span class="ol-c4" role="cell">${evCell('SPX')}</span><span class="ol-c5" role="cell">${evCell('USDIDR')}</span><span></span></div>
       </div>
+      <div id="ol-detail" class="ol-stack">${S.map(x => `<div class="ol-pane ${open === x.id ? 'on' : ''}" data-pane="${x.id}">${det(x)}</div>`).join('')}</div>
       <div class="ol-cond">${(ai.conditions || []).map(c => `<div class="ol-c ${dirCls[c.direction] || ''}" title="${esc(c.direction || '')}"><i></i><b>${esc(c.theme)}</b><span>${cites([c.read])[0]}</span></div>`).join('')}</div>
       <div class="ol-foot">
         <div><span class="ol-l">Versus past crashes</span><p>${cites([ai.history])[0] || '—'}</p></div>

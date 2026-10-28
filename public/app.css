@@ -1616,25 +1616,56 @@ table.t.wb-t td > div.xs.nowrap { white-space: nowrap; }
 .ol-pane .ol-det { height: 100%; box-sizing: border-box; }
 @media (max-width: 760px) { .ol-hero { grid-template-columns: minmax(0, 1fr); } .ol-hero .ol-stance { flex-direction: row; align-items: baseline; gap: 10px; border-right: 0; border-bottom: 1px solid var(--line); padding: 10px 14px; } }
 
-/* outlook: probability ladder (best → worst, top → bottom) with detail beside it */
-.ol-main { display: grid; grid-template-columns: minmax(320px, 400px) minmax(0, 1fr); gap: 14px; align-items: stretch; }
-.ol-viz { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); min-width: 0; }
-.ol-lad-h { display: flex; justify-content: space-between; padding: 0 10px 4px; font-size: calc(10.5px * var(--fs, 1)); color: var(--fg-3); text-transform: uppercase; letter-spacing: .05em; }
-.ol-lad { display: flex; flex-direction: column; gap: 4px; flex: 1; justify-content: space-around; }
-.ol-viz .ol-s { display: grid; grid-template-columns: 96px minmax(0, 1fr) 52px; align-items: center; gap: 12px; padding: 9px 10px; border: 1px solid transparent; border-radius: 9px; background: transparent; box-shadow: none; }
-.ol-viz .ol-s:hover { background: var(--surface); border-color: var(--line); }
-.ol-viz .ol-s.open { background: color-mix(in srgb, var(--sc) 9%, var(--surface)); border-color: color-mix(in srgb, var(--sc) 50%, var(--line)); box-shadow: none; }
-.ol-lab { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.ol-viz .ol-n { display: flex; align-items: baseline; gap: 4px; font-size: calc(12.5px * var(--fs, 1)); font-weight: 600; white-space: nowrap; }
-.ol-viz .ol-n .ol-d { font-size: calc(9.5px * var(--fs, 1)); }
-.ol-viz .ol-h { font-family: var(--mono); font-size: calc(10px * var(--fs, 1)); color: var(--fg-3); white-space: normal; line-height: 1.3; }
-.ol-bar { position: relative; height: 10px; border-radius: 5px; background: color-mix(in srgb, var(--fg-3) 16%, transparent); overflow: hidden; }
-.ol-bar i { position: absolute; inset: 0 auto 0 0; min-width: 3px; border-radius: 5px; background: var(--sc); transition: width .4s ease; }
-.ol-v { font: 600 calc(18px * var(--fs, 1)) var(--mono); text-align: right; color: var(--sc); letter-spacing: -.02em; }
+/* outlook: scenario table (likelihood, horizon, S&P 500 and USD/IDR ranges on shared axes), detail below */
+.ol-tbl { --olc: minmax(170px, 1.25fr) minmax(150px, 1fr) minmax(92px, .55fr) minmax(170px, 1.15fr) minmax(170px, 1.15fr) 18px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); overflow: hidden; }
+.ol-th, .ol-tbl .ol-tr, .ol-tf { display: grid; grid-template-columns: var(--olc); align-items: center; gap: 16px; padding: 0 14px; }
+.ol-th { padding-top: 9px; padding-bottom: 9px; font-size: calc(10.5px * var(--fs, 1)); color: var(--fg-3); text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--line); }
+.ol-th small { text-transform: none; letter-spacing: 0; margin-left: 4px; color: var(--fg-3); opacity: .8; }
+.ol-tbl .ol-tr { min-height: 54px; padding-top: 8px; padding-bottom: 8px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; text-align: left; width: 100%; position: relative; }
+.ol-tbl .ol-tr::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: transparent; }
+.ol-tbl .ol-tr:hover { background: var(--surface); }
+.ol-tbl .ol-tr.open { background: color-mix(in srgb, var(--sc) 8%, var(--surface)); box-shadow: none; border-color: var(--line); }
+.ol-tbl .ol-tr.open::before { background: var(--sc); }
+.ol-tf { padding-top: 10px; padding-bottom: 10px; background: color-mix(in srgb, var(--fg-3) 6%, var(--surface-2)); }
+.ol-c1 { display: grid; grid-template-columns: 10px minmax(0, 1fr); column-gap: 8px; row-gap: 1px; align-items: center; min-width: 0; }
+.ol-tf .ol-c1 { grid-template-columns: minmax(0, 1fr); }
+.ol-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sc); grid-row: span 2; align-self: start; margin-top: 5px; }
+.ol-c1 .ol-n { display: flex; align-items: baseline; gap: 5px; font-size: calc(13px * var(--fs, 1)); font-weight: 600; white-space: nowrap; }
+.ol-c1 .ol-n .ol-d { font-size: calc(9.5px * var(--fs, 1)); }
+.ol-c1 .ol-h { grid-column: 2; font-size: calc(11px * var(--fs, 1)); color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ol-tf .ol-c1 .ol-h { grid-column: 1; }
+.ol-c2 { display: grid; grid-template-columns: minmax(0, 1fr) 48px; align-items: center; gap: 10px; }
+.ol-bar { position: relative; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--fg-3) 16%, transparent); overflow: hidden; }
+.ol-bar i { position: absolute; inset: 0 auto 0 0; min-width: 3px; border-radius: 4px; background: var(--sc); }
+.ol-v { font: 600 calc(17px * var(--fs, 1)) var(--mono); text-align: right; color: var(--sc); letter-spacing: -.02em; }
 .ol-s.base .ol-v { color: var(--fg); }
 .ol-v small { font-size: .6em; color: var(--fg-3); margin-left: 1px; }
-.ol-main .ol-stack { min-width: 0; }
-.ol-main .ol-cols { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-@media (max-width: 1600px) { .ol-main .ol-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ol-main .ol-cols > div:last-child { grid-column: span 2; } }
-@media (max-width: 960px) { .ol-main { grid-template-columns: minmax(0, 1fr); } .ol-main .ol-cols { grid-template-columns: minmax(0, 1fr); } .ol-main .ol-cols > div:last-child { grid-column: auto; } }
-@media (max-width: 420px) { .ol-viz .ol-s { grid-template-columns: 84px minmax(0, 1fr) 46px; gap: 8px; } }
+.ol-c3 { font-size: calc(11px * var(--fs, 1)); color: var(--fg-2); line-height: 1.3; }
+.ol-rg { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.ol-rg-t { display: flex; align-items: baseline; gap: 8px; font-family: var(--mono); font-size: calc(12px * var(--fs, 1)); white-space: nowrap; }
+.ol-rg-t b { font-weight: 600; color: var(--fg); }
+.ol-rg-t em { font-style: normal; font-size: calc(10.5px * var(--fs, 1)); color: var(--fg-3); }
+.ol-rg-t em.up { color: var(--up); } .ol-rg-t em.dn { color: var(--down); }
+.ol-rg-b { position: relative; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--fg-3) 12%, transparent); }
+.ol-rg-b i { position: absolute; top: 0; bottom: 0; border-radius: 3px; background: var(--sc); opacity: .9; }
+.ol-rg-b u { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--fg); border-radius: 1px; z-index: 1; }
+.ol-chev { color: var(--fg-3); display: flex; justify-content: flex-end; }
+.ol-chev .i { width: 14px; height: 14px; transform: rotate(-90deg); transition: transform .15s ease; }
+.ol-tr.open .ol-chev .i { transform: rotate(0deg); color: var(--sc); }
+.ol-q { display: block; margin-top: 4px; font-size: calc(11px * var(--fs, 1)); color: var(--fg-3); }
+#ol-detail .ol-det { border-top-left-radius: 0; border-top-right-radius: 0; }
+.ol-tbl + #ol-detail { margin-top: -8px; }
+.ol-tbl:has(+ #ol-detail) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+#ol-detail .ol-det { border-top: 0; }
+@media (max-width: 1100px) { .ol-tbl { --olc: minmax(150px, 1.2fr) minmax(120px, 1fr) minmax(80px, .55fr) minmax(150px, 1.1fr) minmax(150px, 1.1fr) 14px; } .ol-th, .ol-tbl .ol-tr, .ol-tf { gap: 12px; } }
+@media (max-width: 900px) {
+  .ol-th { display: none; }
+  .ol-tbl .ol-tr, .ol-tf { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-areas: "c1 c2" "c4 c5" "c3 c3"; row-gap: 8px; padding-top: 12px; padding-bottom: 12px; }
+  .ol-c1 { grid-area: c1; } .ol-c2 { grid-area: c2; } .ol-c3 { grid-area: c3; } .ol-c4 { grid-area: c4; } .ol-c5 { grid-area: c5; }
+  .ol-c4::before { content: 'S&P 500'; } .ol-c5::before { content: 'USD/IDR'; }
+  .ol-c4::before, .ol-c5::before { display: block; font-size: calc(10px * var(--fs, 1)); color: var(--fg-3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 3px; }
+  .ol-c3:empty { display: none; } .ol-chev { display: none; }
+  .ol-c3:not(:empty)::before { content: 'Horizon · '; color: var(--fg-3); }
+}
+.ol-main .ol-cols, #ol-detail .ol-cols { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1100px) { #ol-detail .ol-cols { grid-template-columns: minmax(0, 1fr); } }
