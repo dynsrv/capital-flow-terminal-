@@ -1270,3 +1270,43 @@ body.admin-mode main { max-width: 1480px; padding-top: 20px; }
 
 .mem-add .field > label { min-height: 18px; display: flex; align-items: flex-end; }
 .mem-add .inline { gap: 8px; }
+
+/* ───────── consistency pass: one control height, one radius, one focus ring, aligned cards and tables ───────── */
+:root { --ctl-h: 36px; --ctl-r: 8px; }
+.input, select, input[type=text], input[type=password], input[type=number], input[type=search], .btn { height: var(--ctl-h); border-radius: var(--ctl-r); }
+.input, input[type=text], input[type=password], input[type=number], input[type=search] { font-size: calc(13px * var(--fs, 1)); background: var(--surface-2); border: 1px solid var(--line-2); color: var(--fg); transition: border-color .15s, box-shadow .15s; }
+.input:hover, input[type=text]:hover, input[type=password]:hover, input[type=number]:hover, input[type=search]:hover { border-color: var(--fg-3); }
+.input:focus, input[type=text]:focus, input[type=password]:focus, input[type=number]:focus, input[type=search]:focus { outline: none; border-color: #fb8b1e; box-shadow: 0 0 0 3px color-mix(in srgb, #fb8b1e 18%, transparent); }
+.btn { padding: 0 14px; }
+.btn.sm, .mem-acts .btn.sm { height: 28px; padding: 0 10px; border-radius: 7px; }
+.seg { align-items: center; }
+.seg button { height: 28px; display: inline-flex; align-items: center; }
+.icon-btn { border-radius: var(--ctl-r); }
+.inline { gap: 8px; }
+.field > label, .form-row > label { margin-bottom: 6px; }
+.row-actions { gap: 8px; }
+/* cards: same header height whether or not there is a subtitle, equal heights within a row */
+.card-h { min-height: 62px; }
+.grid:not(.pre-grid):not(.gl-grid) { align-items: stretch; }
+.adm-2 { align-items: stretch; }
+.adm-2 > .card, .grid > .card { height: auto; }
+/* tables: descriptions wrap instead of pushing columns out of narrow cards */
+table.t th, table.t td { padding-left: 12px; padding-right: 12px; }
+table.t td .inst span, table.t td > .xs, table.t td > div.xs { white-space: normal; }
+#sh-table .inst span, #corr-shift .inst span, #macro-table .inst span { max-width: 190px; }
+#sh-table td, #corr-shift td { padding-left: 10px; padding-right: 10px; }
+/* heat tiles: the tile colour carries the sign, so the figure stays in the ink colour for contrast */
+.tile .v.up, .tile .v.down { color: var(--fg); }
+html[data-theme="light"] .tile .v.up, html[data-theme="light"] .tile .v.down { color: var(--fg); }
+/* admin: no glossary shortcut inside the console */
+body.admin-mode #help-btn { display: none !important; }
+.adm-lock-card input { height: 42px; }
+@media (max-width: 760px) {
+  :root { --ctl-h: 40px; }
+  .btn.sm, .mem-acts .btn.sm { height: 32px; }
+  .seg button { height: 32px; }
+  .card-h { min-height: 0; }
+}
+.rt-tbl select { min-width: 118px; padding-right: 30px; background-position: right 9px center; }
+#adm-fields select { min-width: 220px; }
+.rt-p .icon-btn.sm { width: 24px; height: 24px; }

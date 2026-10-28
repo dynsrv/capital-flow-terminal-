@@ -38,6 +38,21 @@ async function dailySnapshot(ctx) {
   return { snapshot: day };
 }
 
+/** Long jobs (model calls): Vercel Edge must start a response within 25 s, so stream a space every 5 s and then the
+ *  JSON. Leading whitespace is valid JSON, so callers parse it as usual; failures arrive as { ok: false, error }. */
+function streamJson(work, demoMode) {
+  const enc = new TextEncoder(); const t0 = Date.now();
+  const body = new ReadableStream({
+    async start(c) {
+      const hb = setInterval(() => { try { c.enqueue(enc.encode(' ')); } catch (e) {} }, 5000); c.enqueue(enc.encode(' '));
+      try { const data = await work(); c.enqueue(enc.encode(JSON.stringify({ ok: true, demoMode, generatedAt: new Date().toISOString(), ms: Date.now() - t0, ...data }))); }
+      catch (e) { c.enqueue(enc.encode(JSON.stringify({ ok: false, error: e.message || String(e) }))); }
+      finally { clearInterval(hb); c.close(); }
+    },
+  });
+  return new Response(body, { status: 200, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
+}
+
 function parseIds(url, fallback) {
   const s = url.searchParams.get('ids');
   if (!s) return fallback;
@@ -107,14 +122,13 @@ async function handleApi(request, env, url) {
       // Model calls cost money: admin only. Visitors read the stored reading from /intel/reading.
       const auth = checkAdminAuth(request, env); if (!auth.ok) return error('Refreshing the AI reading requires the admin token', 401);
       let body = {}; try { body = await request.json(); } catch (e) {}
-      return wrap(await intelligence(ctx, { ids: body.ids, question: body.question, model: body.model }));
+      return streamJson(() => intelligence(ctx, { ids: body.ids, question: body.question, model: body.model }), config.demoMode);
     }
     if (p === '/cron/refresh') {
       const secret = env.CRON_SECRET; const auth = request.headers.get('authorization') || '';
       const okCron = secret && auth === `Bearer ${secret}`; const okAdmin = checkAdminAuth(request, env).ok;
       if (!okCron && !okAdmin) return error('Unauthorised', 401);
-      const out = { usage: await U.compact(env.__store).catch(e => ({ error: e.message })), histories: await persistHistories(ctx).catch(e => ({ error: e.message })), snapshot: await dailySnapshot(ctx).catch(e => ({ error: e.message })), ai: await scheduledRefresh(ctx).catch(e => ({ error: e.message })), realtimeScan: rtSettings(config).enabled ? await scanPlans(ctx).then(x => x.summary).catch(e => ({ error: e.message })) : { skipped: 'real-time off' }, news: (config.keys.NEWS_AI_CURATION || 'off') === 'daily' ? await curateNews(ctx).then(c => ({ curated: c.picks.length })).catch(e => ({ error: e.message })) : { skipped: 'news curation not scheduled' } };
-      return wrap(out);
+      return streamJson(async () => ({ usage: await U.compact(env.__store).catch(e => ({ error: e.message })), histories: await persistHistories(ctx).catch(e => ({ error: e.message })), snapshot: await dailySnapshot(ctx).catch(e => ({ error: e.message })), ai: await scheduledRefresh(ctx).catch(e => ({ error: e.message })), realtimeScan: rtSettings(config).enabled ? await scanPlans(ctx).then(x => x.summary).catch(e => ({ error: e.message })) : { skipped: 'real-time off' }, news: (config.keys.NEWS_AI_CURATION || 'off') === 'daily' ? await curateNews(ctx).then(c => ({ curated: c.picks.length })).catch(e => ({ error: e.message })) : { skipped: 'news curation not scheduled' } }), config.demoMode);
     }
 
     if (p === '/shock/betas') {
@@ -137,7 +151,7 @@ async function handleApi(request, env, url) {
         return wrap({ saved: Object.keys(body) });
       }
       if (p === '/admin/models') return wrap(await listModels(config));
-      if (p === '/admin/news-curate' && request.method === 'POST') { const body = await request.json().catch(() => ({})); return wrap({ curated: await curateNews(ctx, { model: body.model }) }); }
+      if (p === '/admin/news-curate' && request.method === 'POST') { const body = await request.json().catch(() => ({})); return streamJson(async () => ({ curated: await curateNews(ctx, { model: body.model }) }), config.demoMode); }
       if (p === '/admin/news-sources') return wrap({ sources: NEWS_SOURCES.map(({ id, name, region, cat, url }) => ({ id, name, region, cat, url })) });
       if (p === '/admin/tv' && request.method === 'GET') return wrap({ ...(await getChannels(ctx)), defaults: DEFAULT_CHANNELS });
       if (p === '/admin/tv' && request.method === 'POST') { const body = await request.json().catch(() => ({})); return wrap(body.reset ? await resetChannels(ctx) : await saveChannels(ctx, body.channels)); }
@@ -161,7 +175,7 @@ async function handleApi(request, env, url) {
       if (p === '/admin/persist' && request.method === 'POST') return wrap({ histories: await persistHistories(ctx), snapshot: await dailySnapshot(ctx) });
       if (p === '/admin/ai-refresh' && request.method === 'POST') {
         const body = await request.json().catch(() => ({}));
-        return wrap({ reading: await refreshReading(ctx, { model: body.model, question: body.question, trigger: 'admin' }) });
+        return streamJson(async () => ({ reading: await refreshReading(ctx, { model: body.model, question: body.question, trigger: 'admin' }) }), config.demoMode);
       }
       if (p === '/admin/test' && request.method === 'POST') {
         const body = await request.json().catch(() => ({}));

@@ -23,6 +23,7 @@
     logout: '<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="m10 17-5-5 5-5"/><path d="M5 12h11"/>',
     back: '<path d="m15 18-6-6 6-6"/>',
     home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>',
+    help: '<circle cx="12" cy="12" r="9.5"/><path d="M9.4 9.2a2.7 2.7 0 0 1 5.2 1c0 1.9-2.6 2.4-2.6 4.1"/><path d="M12 17.6h.01"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
     link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
@@ -315,7 +316,7 @@
   /* ───────── shell ───────── */
   function buildNav() {
     const item = (k) => `<button type="button" data-view="${k}" title="${esc(VIEWS[k].title)}">${ic(VIEWS[k].icon)}<span class="lbl">${esc(VIEWS[k].label)}</span>${VIEWS[k].tag ? `<span class="tag">${VIEWS[k].tag}</span>` : ''}</button>`;
-    const html = ['overview', 'monitor', 'flows'].map(item).join('') + '<span class="nav-sep"></span>' + ['analytics', 'risk', 'intel', 'shock'].map(item).join('') + '<span class="nav-sep"></span>' + item('glossary'); // Admin is not in the nav: open it at #admin
+    const html = ['monitor', 'flows'].map(item).join('') + '<span class="nav-sep"></span>' + ['analytics', 'risk', 'intel', 'shock'].map(item).join(''); // Overview is the logo; Glossary is the (?) button; // Admin is not in the nav: open it at #admin
     $('#nav').innerHTML = html; $('#nav-mobile').innerHTML = html;
     const go = (e) => { const b = e.target.closest('button'); if (b && b.dataset.view) { closeOverlays(); show(b.dataset.view); } };
     $('#nav').onclick = go; $('#nav-mobile').onclick = go;
@@ -950,7 +951,14 @@
     loadReading();
   }
   function renderFindings(st, box) {
-    const ai = st.ai || {}; const news = (st.news && st.news.items) || [];
+    let ai = st.ai || {}; const news = (st.news && st.news.items) || [];
+    // readings saved before the parser fix may hold the model's JSON as text: recover it, or say it was cut off
+    if (!(ai.findings || []).length && /[{`]/.test(ai.overview || '')) {
+      let t = String(ai.overview); const f = t.match(/```(?:json)?\s*([\s\S]*?)(```|$)/i); if (f) t = f[1]; const a = t.indexOf('{'), b = t.lastIndexOf('}');
+      let ok = null; try { ok = a >= 0 && b > a ? JSON.parse(t.slice(a, b + 1)) : null; } catch (e) { ok = null; }
+      if (ok && Array.isArray(ok.findings)) ai = ok;
+      else { box.innerHTML = `<div class="callout warn">${ic('alert')}<div><b>The stored reading is incomplete.</b> The model's answer was cut off before it finished, so it cannot be shown. ${state.admin.token ? 'Press Refresh to generate a new one.' : 'An administrator can refresh it from the Admin console.'}</div></div>`; return; }
+    }
     box.innerHTML = `<div class="callout">${ic('intel')}<div><b>Overview.</b> ${esc(ai.overview || '')}</div></div>` + (ai.findings || []).map(f => `<div class="finding"><h4>${esc(f.signal)} <span class="badge ${f.confidence === 'High' ? 'measured' : f.confidence === 'Medium' ? 'mid' : 'bad'}">${esc(f.confidence)} confidence</span></h4>
         <div class="row"><b>Evidence</b><ul>${(f.evidence || []).map(x => `<li>${esc(x)}</li>`).join('')}</ul></div>
         <div class="row"><b>Possible cause</b><div>${esc(f.possibleCause)}</div></div>
@@ -1032,7 +1040,7 @@
           <section class="adm-sec" data-sec="usage">${card({ icon: 'db', title: 'Usage & API logs', sub: 'Every upstream API call, model token and storage operation, with an estimated cost', body: '<div id="adm-usage"><p class="dim">Unlock to view.</p></div>', cls: 'us-card' })}</section>
           <section class="adm-sec" data-sec="tv">${card({ icon: 'tv', title: 'Live TV channels', sub: 'Broadcaster HLS streams offered in the sidebar player', body: '<div id="adm-tv"><p class="dim">Unlock to edit.</p></div>' })}</section>
           <section class="adm-sec" data-sec="appearance">${card({ icon: 'book', title: 'Appearance', sub: 'Font and text size for everyone who opens the terminal', body: '<div id="adm-ui"><p class="dim">Unlock to change.</p></div>' })}</section>
-          <section class="adm-sec" data-sec="data"><div class="adm-2">${card({ icon: 'db', title: 'Storage & cache', body: '<div id="adm-status"><p class="dim">Unlock to view.</p></div>' })}${card({ icon: 'info', title: 'How data is handled', body: '<div class="sm dim" style="display:flex;flex-direction:column;gap:8px"><p><b>No key needed:</b> Yahoo Finance (delayed), FRED, CoinGecko public, gold-api.com.</p><p><b>Optional:</b> FRED, EIA, CoinGecko (longer history), Anthropic (AI explanations), Exa or Parallel (news citations).</p><p><b>Cache:</b> quotes 60 s, histories 15 min, macro 1 h. If a source fails, the last value is served and flagged stale.</p><p><b>Demo mode</b> shows a permanent banner and every badge reads demo.</p></div>' })}</div>${card({ icon: 'layers', title: 'Market-size reference data', sub: 'Published aggregates behind the Overview treemap', body: '<div id="adm-sizes"><p class="dim">Unlock to edit.</p></div>', foot: 'Update when a newer SIFMA Fact Book or World Gold Council figure is published, and keep the source and as-of date.' })}</section>
+          <section class="adm-sec" data-sec="data"><div class="adm-2">${card({ icon: 'db', title: 'Storage & cache', sub: 'Health of each delayed price source right now', body: '<div id="adm-status"><p class="dim">Unlock to view.</p></div>' })}${card({ icon: 'info', title: 'How data is handled', sub: 'Sources, keys, cache lifetimes and demo mode', body: '<div class="sm dim" style="display:flex;flex-direction:column;gap:8px"><p><b>No key needed:</b> Yahoo Finance (delayed), FRED, CoinGecko public, gold-api.com.</p><p><b>Optional:</b> FRED, EIA, CoinGecko (longer history), Anthropic (AI explanations), Exa or Parallel (news citations).</p><p><b>Cache:</b> quotes 60 s, histories 15 min, macro 1 h. If a source fails, the last value is served and flagged stale.</p><p><b>Demo mode</b> shows a permanent banner and every badge reads demo.</p></div>' })}</div>${card({ icon: 'layers', title: 'Market-size reference data', sub: 'Published aggregates behind the Overview treemap', body: '<div id="adm-sizes"><p class="dim">Unlock to edit.</p></div>', foot: 'Update when a newer SIFMA Fact Book or World Gold Council figure is published, and keep the source and as-of date.' })}</section>
         </div></div>`;
     const lazy = { realtime: () => renderAdminRealtime(hdr), usage: () => renderAdminUsage(hdr), members: () => renderAdminMembers(hdr), home: () => renderAdminHome(hdr) };
     const opened = new Set();
@@ -1582,6 +1590,7 @@ ${x.ops.sort((a, b) => b.cost - a.cost || b.n - a.n).map(o => `<tr class="us-op-
     state.view = view; const meta = VIEWS[view];
     document.body.classList.toggle('admin-mode', view === 'admin'); if (view === 'admin') { const sd = $('#side'); if (sd) sd.classList.remove('open'); }
     $$('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+    const hb = $('#help-btn'); if (hb) hb.classList.toggle('on', view === 'glossary'); const br = $('.brand'); if (br) br.classList.toggle('active', view === 'overview');
     $$('.view').forEach(s => s.classList.toggle('active', s.id === 'view-' + view));
     $('#page-title').textContent = meta.title; $('#page-sub').textContent = meta.sub; document.title = `${meta.label} · Capital Flow Terminal`;
     $('#app-title-page').textContent = titleCase(meta.title); $('.topbar').classList.remove('titled'); syncTabs();
@@ -1603,6 +1612,7 @@ ${x.ops.sort((a, b) => b.cost - a.cost || b.n - a.n).map(o => `<tr class="us-op-
   // theme attribute from storage may be JSON-encoded by store.set; normalise once
   try { const raw = localStorage.getItem('cft:theme'); if (raw && raw.startsWith('"')) { const t = JSON.parse(raw); localStorage.setItem('cft:theme', t); document.documentElement.dataset.theme = t; } } catch (e) {}
   buildNav(); paintIcons(); syncThemeIcon();
+  $('#help-btn').onclick = () => { closeOverlays(); show('glossary'); };
   $('#member-btn').onclick = () => { if (state.admin.token && !memberTok()) { show('admin'); return; } openAccount(); };
   $('#ticker-tag').onclick = () => { if (!isLive()) openAccount(); else if (memberTok()) openAccount(); };
   $('#admin-lock').onclick = () => { state.admin.token = ''; try { sessionStorage.removeItem('cft:admin'); } catch (e) {} syncRole(); startRt(); toast('Admin locked'); if (state.view === 'admin') renderAdmin(); };

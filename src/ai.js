@@ -3,6 +3,7 @@
 // return a structured Signal → Evidence → Possible Cause → Cross-Asset Impact → Confidence → What to Watch.
 // Without an Anthropic key the endpoint returns the measured inputs with an explicit "AI not configured" flag.
 import { fetchJSON } from './lib/util.js';
+import { callClaudeJson } from './lib/claude.js';
 import { anomalies, regime, patterns, performance } from './analytics.js';
 import { preCrash } from './precrash.js';
 import { stressIndex } from './risk.js';
@@ -15,7 +16,7 @@ Rules:
 - If news snippets are provided, cite them by their [n] index; if none, say evidence is price/volatility-based only.
 - Draw on lessons from Black Monday 1987, the dot-com bust 2000-02 and the 2008 subprime crisis where the pre-crash condition checks show resemblance; otherwise do not force the analogy. Pre-crash conditions (what was in place before each peak) matter more than crash signatures (what the crash itself looked like).
 - Confidence: Low / Medium / High with one-line justification.
-Return strict JSON: {"findings":[{"signal":"","evidence":["..."],"possibleCause":"","crossAssetImpact":"","confidence":"Low|Medium|High","confidenceWhy":"","whatToWatch":["..."],"classification":{"verifiedFacts":["..."],"historicalRelationships":["..."],"hypotheses":["..."],"scenarios":["..."]},"citations":[1,2]}],"overview":"2-3 sentence summary of what is changing and why it matters"}`;
+Return only the JSON object, with no code fence and no text before or after it: {"findings":[{"signal":"","evidence":["..."],"possibleCause":"","crossAssetImpact":"","confidence":"Low|Medium|High","confidenceWhy":"","whatToWatch":["..."],"classification":{"verifiedFacts":["..."],"historicalRelationships":["..."],"hypotheses":["..."],"scenarios":["..."]},"citations":[1,2]}],"overview":"2-3 sentence summary of what is changing and why it matters"}`;
 
 export async function exaSearch(key, query, n = 6) {
   const j = await fetchJSON('https://api.exa.ai/search', { method: 'POST', timeoutMs: 20000, tag: 'news search', headers: { 'x-api-key': key, 'content-type': 'application/json' }, body: JSON.stringify({ query, numResults: n, type: 'auto', contents: { highlights: true }, startPublishedDate: new Date(Date.now() - 7 * 86400e3).toISOString() }) });
@@ -64,15 +65,9 @@ export async function intelligence(ctx, { ids, question, model } = {}) {
 
   const userMsg = `INPUT DATA (measured):\n${JSON.stringify(inputs, null, 1)}\n\nNEWS SNIPPETS:\n${news.items.length ? news.items.map(n => `[${n.n}] ${n.title} (${n.published || 'n.d.'}) ${n.url}\n${n.snippet}`).join('\n\n') : '(none)'}\n\n${question ? `USER QUESTION: ${question}\n` : ''}Produce 2-5 findings, most significant first.`;
   try {
-    const j = await fetchJSON('https://api.anthropic.com/v1/messages', {
-      method: 'POST', timeoutMs: 60000, tag: 'AI reading',
-      headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-      body: JSON.stringify({ model: model || config.keys.ANTHROPIC_MODEL || 'claude-sonnet-5-5', max_tokens: 2500, system: SYSTEM, messages: [{ role: 'user', content: userMsg }] }),
-    });
-    const text = (j.content || []).map(c => c.text || '').join('');
-    const m = text.match(/\{[\s\S]*\}/);
-    let parsed = null; try { parsed = JSON.parse(m ? m[0] : text); } catch (e) { parsed = { overview: text, findings: [] }; }
-    result.ai = parsed; result.aiStatus = { configured: true, model: j.model, usage: j.usage };
+    const r = await callClaudeJson(apiKey, { model: model || config.keys.ANTHROPIC_MODEL || 'claude-sonnet-5-5', system: SYSTEM, user: userMsg, tag: 'AI reading' });
+    const parsed = r.json; if (!Array.isArray(parsed.findings)) parsed.findings = [];
+    result.ai = parsed; result.aiStatus = { configured: true, model: r.model, usage: r.usage };
   } catch (e) { result.aiStatus = { configured: true, error: e.message }; }
   return result;
 }

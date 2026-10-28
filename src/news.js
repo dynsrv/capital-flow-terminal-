@@ -3,6 +3,7 @@
 // configured and NEWS_AI_CURATION is on, an admin or the daily job can ask the model to rank and annotate
 // the headlines. The model only sees titles, sources and dates: it does not browse.
 import { fetchText, fetchJSON } from './lib/util.js';
+import { callClaudeJson } from './lib/claude.js';
 
 const gn = (q, lang) => (lang === 'id' ? `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=id&gl=ID&ceid=ID:id` : `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`);
 
@@ -70,7 +71,7 @@ export async function fetchNews(ctx) {
 
 /* ───────── AI curation (optional, admin or daily job) ───────── */
 const CURATE_SYSTEM = `You curate a market-intelligence news panel for an institutional reader covering global and Indonesian markets.
-You receive headlines only (title, source, time, region). You cannot browse. Return strict JSON:
+You receive headlines only (title, source, time, region). You cannot browse. Return only the JSON object, with no code fence and no text around it:
 {"picks":[{"i":<index>,"score":0-100,"cat":"market|financial|geopolitical","why":"<=18 words on why it matters for markets","assets":["SPX","UST10Y","DXY","WTI","GOLD","BTC","IDR","JCI",...]}],"themes":["<=6 words"...]}
 Rules: pick the 20-30 most market-relevant headlines, prefer concrete events over commentary, keep at least 6 Indonesian items when available, never invent facts beyond the headline, no duplicates, assets only from the universe list given.`;
 
@@ -79,9 +80,8 @@ export async function curateNews(ctx, { model } = {}) {
   if (!key) throw new Error('Anthropic key not configured');
   const feed = await fetchNews(ctx);
   const lines = feed.items.slice(0, 120).map((it, i) => `${i}\t${it.region}\t${it.source}\t${it.publishedAt ? it.publishedAt.slice(0, 16) : 'n.d.'}\t${it.title}`).join('\n');
-  const j = await fetchJSON('https://api.anthropic.com/v1/messages', { method: 'POST', timeoutMs: 60000, tag: 'news curation', headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' }, body: JSON.stringify({ model: model || config.keys.ANTHROPIC_MODEL || 'claude-sonnet-5-5', max_tokens: 2500, system: CURATE_SYSTEM, messages: [{ role: 'user', content: `Asset universe: SPX NDX RUT SX5E NKY SHCOMP HSI EEM JCI KOSPI NIFTY UST2Y UST10Y HYOAS BTC ETH GOLD SILVER WTI BRENT NATGAS COPPER DXY EURUSD USDJPY USDCNY USDIDR VIX\n\nHEADLINES (index<TAB>region<TAB>source<TAB>time<TAB>title):\n${lines}` }] }) });
-  const text = (j.content || []).map(c => c.text || '').join(''); const m = text.match(/\{[\s\S]*\}/);
-  let parsed; try { parsed = JSON.parse(m ? m[0] : text); } catch (e) { throw new Error('Model returned unparseable JSON'); }
+  const j = await callClaudeJson(key, { model: model || config.keys.ANTHROPIC_MODEL || 'claude-sonnet-5-5', system: CURATE_SYSTEM, user: `Asset universe: SPX NDX RUT SX5E NKY SHCOMP HSI EEM JCI KOSPI NIFTY UST2Y UST10Y HYOAS BTC ETH GOLD SILVER WTI BRENT NATGAS COPPER DXY EURUSD USDJPY USDCNY USDIDR VIX\n\nHEADLINES (index<TAB>region<TAB>source<TAB>time<TAB>title):\n${lines}`, tag: 'news curation' });
+  const parsed = j.json;
   const picks = (parsed.picks || []).filter(p => feed.items[p.i]).map(p => ({ ...feed.items[p.i], score: p.score, cat: p.cat || feed.items[p.i].cat, why: p.why, assets: p.assets || [], curated: true })).sort((a, b) => b.score - a.score);
   const out = { curatedAt: new Date().toISOString(), model: j.model, themes: parsed.themes || [], picks, usage: j.usage || null };
   if (env.__store && env.__store.persistent) await env.__store.putJSON('news/curated', out); else await ctx.cache.write('news:curated', { data: out, fetchedAt: Date.now() }, 86400);
