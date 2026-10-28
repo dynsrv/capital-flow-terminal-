@@ -61,7 +61,7 @@ export async function snapshot(ctx) {
 }
 
 // Condition helpers: each returns { label, then, now, hit, measured, note? }
-const C = {
+export const C = {
   longRally: (S, thenTxt, thr = 25) => ({ key: 'rally', label: `Extended equity rally into the peak`, then: thenTxt, now: `S&P 500 ${fmtPct(S.spx2y)} over 2 years, ${fmtPct(S.spx1y)} over 1 year`, hit: S.spx2y != null && S.spx2y >= thr, measured: S.spx2y != null }),
   nearHigh: (S, thenTxt) => ({ key: 'nearhigh', label: 'Equities at or near record highs', then: thenTxt, now: S.spxFromHigh == null ? 'n/a' : `S&P 500 ${fmtPct(S.spxFromHigh)} from its 1-year high`, hit: S.spxFromHigh != null && S.spxFromHigh > -5, measured: S.spxFromHigh != null }),
   tightening: (S, thenTxt, bp = 100, days = '2y') => ({ key: 'tightening', label: 'Fed had been raising rates', then: thenTxt, now: S.ff == null ? 'n/a' : `Fed funds ${S.ff.toFixed(2)}%, ${fmtBp(days === '1y' ? S.ffchg1y : S.ffchg2y)} over ${days === '1y' ? '1 year' : '2 years'}`, hit: (days === '1y' ? S.ffchg1y : S.ffchg2y) != null && (days === '1y' ? S.ffchg1y : S.ffchg2y) >= bp, measured: S.ff != null }),

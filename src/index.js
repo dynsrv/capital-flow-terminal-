@@ -12,6 +12,7 @@ import * as R from './risk.js';
 import * as I from './insights.js';
 import { testCredential } from './keytest.js';
 import { preCrash } from './precrash.js';
+import { recentEpisodes } from './recent.js';
 import { getReading, refreshReading, scheduledRefresh, listModels, listReadings } from './reading.js';
 import { fetchNews, curateNews, getCurated, SOURCES as NEWS_SOURCES } from './news.js';
 import { getChannels, saveChannels, resetChannels, hlsRelay, DEFAULT_CHANNELS } from './tv.js';
@@ -101,6 +102,7 @@ async function handleApi(request, env, url) {
     if (p === '/intel/anomalies') { const an = await A.anomalies(ctx, parseIds(url, ASSETS.filter(a => a.cls !== 'macro' || a.id === 'VIX').map(a => a.id))); return wrap(url.searchParams.get('analysis') === '0' ? an : await I.annotateAnomalies(ctx, an)); }
     if (p === '/intel/patterns') return wrap(await A.patterns(ctx));
     if (p === '/intel/precrash') return wrap(await preCrash(ctx));
+    if (p === '/intel/recent') return wrap(await recentEpisodes(ctx));
     if (p === '/risk/table') { const t = await R.riskTable(ctx); t.rows.forEach(r => { r.reading = I.rowReading(r); }); return wrap(t); }
     if (p === '/risk/highlights') return wrap(await I.riskHighlights(ctx));
     if (p === '/risk/stress') return wrap(await R.stressIndex(ctx, Number(url.searchParams.get('years') || 2)));

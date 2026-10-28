@@ -1311,3 +1311,48 @@ body.admin-mode #help-btn { display: none !important; }
 #adm-fields select { min-width: 220px; }
 .rt-p .icon-btn.sm { width: 24px; height: 24px; }
 #ai-meta { display: inline-flex; align-items: center; gap: 8px; }
+
+/* ───────── AI market intelligence: tidy findings ───────── */
+#ai-body { display: flex; flex-direction: column; gap: 12px; }
+#ai-body > .callout { margin: 0; }
+#ai-body > p.xs { margin: 2px 0 0; }
+.finding h4 { padding: 14px 18px; line-height: 1.4; gap: 10px; }
+.finding .row { grid-template-columns: 136px minmax(0, 1fr); gap: 4px 18px; padding: 12px 18px; line-height: 1.55; align-items: start; }
+.finding .row > b { padding-top: 3px; font-weight: 600; line-height: 1.4; }
+.finding ul { padding-left: 16px; display: flex; flex-direction: column; gap: 3px; }
+.finding li::marker { color: var(--fg-3); }
+.cls-list { display: flex; flex-direction: column; gap: 8px; font-size: calc(12.5px * var(--fs, 1)); }
+.cls-item { display: grid; grid-template-columns: 172px minmax(0, 1fr); gap: 12px; align-items: start; }
+.cls-item > .badge { justify-self: start; margin-top: 1px; }
+#ai-ctl { margin-bottom: 4px; }
+@media (max-width: 760px) {
+  .finding .row { grid-template-columns: minmax(0, 1fr); padding: 12px 14px; }
+  .finding h4 { padding: 12px 14px; }
+  .cls-item { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+}
+
+/* ───────── 2020–2023 episodes card ───────── */
+.rc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap); align-items: start; }
+.rc-ep { border: 1px solid var(--line); border-radius: var(--r); background: var(--surface-2); padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.rc-t { display: flex; gap: 12px; align-items: center; }
+.rc-t b { font-size: calc(15px * var(--fs, 1)); letter-spacing: -.01em; }
+.rc-yr { display: grid; place-items: center; min-width: 58px; height: 38px; padding: 0 8px; border-radius: 9px; background: var(--surface); border: 1px solid var(--line-2); font: 600 calc(12.5px * var(--fs, 1)) var(--mono); color: var(--accent); }
+.rc-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.rc-facts > div { background: var(--surface); padding: 9px 11px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.rc-facts span { font-size: calc(11px * var(--fs, 1)); color: var(--fg-3); }
+.rc-facts b { font-size: calc(12px * var(--fs, 1)); font-weight: 500; line-height: 1.4; }
+.rc-story { margin: 0; font-size: calc(12.5px * var(--fs, 1)); color: var(--fg-2); line-height: 1.6; }
+.rc-tabs { align-self: flex-start; }
+.rc-n { margin-left: 6px; font: 600 calc(10.5px * var(--fs, 1)) var(--mono); padding: 1px 6px; border-radius: 5px; background: var(--surface); color: var(--fg-3); }
+.rc-n.hot { color: var(--warn); }
+.rc-q { margin: 0; font-size: calc(12.5px * var(--fs, 1)); color: var(--fg-2); }
+.rc-impact { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: calc(12.5px * var(--fs, 1)); line-height: 1.55; }
+.rc-impact li::marker { color: var(--fg-3); font-family: var(--mono); }
+.rc-ep .callout { margin: 0; }
+.rc-src a { color: var(--fg-2); }
+.rc-src a:hover { color: var(--accent); }
+@media (max-width: 1200px) { .rc-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px) { .rc-facts { grid-template-columns: minmax(0, 1fr); } .rc-ep { padding: 14px; } .rc-tabs { align-self: stretch; } }
+.rc-yr { white-space: nowrap; }
+.rc-dates { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 3px; }
+.rc-dates span { white-space: nowrap; }

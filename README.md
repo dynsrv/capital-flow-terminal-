@@ -107,6 +107,15 @@ operations and our own function invocations are counted too, as are live-TV rela
 - **Settings:** *Usage meter* (on/off) and *Usage save interval* in the credentials panel (group Usage).
 - Admin keys are now read from storage at most once every 30 s per instance instead of on every request.
 
+## 2020–2023 episodes (Intelligence)
+
+A card for the COVID crash (Feb–Mar 2020) and the inflation bear market (2022, with the March 2023 bank stress), each in
+three phases: **Before the peak** (documented conditions, each tested against current data, e.g. rally length, record
+highs, volatility, credit, Fed cuts or loose policy, inflation, speculation, valuation, mechanical selling), **During the
+fall** (the signature of the fall: VIX above 40, 20% in a month, HY widening, dollar dash, oil collapse; or stocks and bonds
+falling together, 250 bp of hikes, CPI above 7%, dollar surge, deep inversion, crypto collapse, growth underperformance)
+with a "happening now?" score, and **Impact** (policy response, casualties, recovery time, lesson). API: `/api/intel/recent`.
+
 ## Valuation and systematic-selling measures
 
 Two pre-crash conditions are measured from free official data and public prices (`src/valuation.js`):

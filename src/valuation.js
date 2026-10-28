@@ -51,6 +51,8 @@ export async function valuation(ctx, spxPoints) {
       1987: { toGdp: ref(toGdp, '1987-07-01'), toProfits: ref(toProfits, '1987-07-01') },
       2000: { toGdp: ref(toGdp, '2000-01-01'), toProfits: ref(toProfits, '2000-01-01') },
       2007: { toGdp: ref(toGdp, '2007-07-01'), toProfits: ref(toProfits, '2007-07-01') },
+      2020: { toGdp: ref(toGdp, '2019-10-01'), toProfits: ref(toProfits, '2019-10-01') },
+      2022: { toGdp: ref(toGdp, '2021-10-01'), toProfits: ref(toProfits, '2021-10-01') },
     },
     history: toGdp.slice(-120),
     sources: ['https://fred.stlouisfed.org/series/NCBEILQ027S', 'https://fred.stlouisfed.org/series/GDP', 'https://fred.stlouisfed.org/series/CP'],
