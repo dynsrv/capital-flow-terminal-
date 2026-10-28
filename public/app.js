@@ -1103,7 +1103,8 @@
 
   /* ───────── Market outlook: five scenarios ───────── */
   const OL = { bull: ['Bull', 'New highs, contained volatility'], base: ['Base', 'Range-bound, drawdown under 10%'], correction: ['Correction', '10–20% fall, recovers in months'], bear: ['Bear', '20–30% fall over quarters'], crash: ['Crash', '30%+ or 20% in weeks, forced selling'] };
-  const olState = { open: null };
+  const olState = { open: null, ctx: 'history' };
+  const OLCTX = [['history', 'Versus past crashes'], ['indonesia', 'Indonesia'], ['change', 'What would change this view'], ['odds', 'How the odds were set']];
   async function renderOutlook() {
     const box = $('#ol-box'); if (!box) return;
     let r; try { r = await api('/intel/outlook'); } catch (e) { box.innerHTML = ''; return; }
@@ -1151,6 +1152,8 @@
         <div><span class="ol-l">What makes it likelier</span><ul>${cites(x.drivers).map(t => `<li>${t}</li>`).join('') || '<li class="muted">—</li>'}</ul>${fxLine(x)}</div>
         <div><span class="ol-l">Triggers to watch</span><ul>${cites(x.triggers).map(t => `<li>${t}</li>`).join('') || '<li class="muted">—</li>'}</ul>${(x.watch || []).length ? `<span class="ol-l">Gauges</span><p class="xs">${cites(x.watch).join(' · ')}</p>` : ''}</div>
       </div></div>`;
+    // Long notes are split into sentences so the context columns break between sentences, never inside one.
+    const sentences = (t) => { const parts = String(t || '').split(/(?<=[.;])\s+(?=[A-Z0-9(])/).filter(Boolean); return parts.length ? parts.map(x => `<p>${cites([x])[0]}</p>`).join('') : '<p>—</p>'; };
     const stance = { 'risk-on': 'up', neutral: '', cautious: 'warn-c', defensive: 'down' }[ai.stance] || '';
     box.innerHTML = card({ icon: 'compass', cls: 'ol-card', title: 'Market outlook: five scenarios', sub: 'Likelihood over the next 3–6 months, from the measured inputs on this page, the headlines of the day and the pre-conditions of past crashes', actions: `<span class="badge ${r.stale ? 'mid' : 'measured'}" title="${esc(o.generatedAt)}">${r.stale ? 'may be outdated' : 'current'}</span><span class="xs muted">${fmt.ago(o.generatedAt)} · ${esc(o.model || '')} · ${o.trigger === 'schedule' ? 'scheduled' : 'manual'}</span><span class="badge ai">AI judgement</span>${refreshBtn}`, body: `
       <div class="ol-hero ${stance}"><div class="ol-stance ${stance}"><span>Stance</span><b>${esc(ai.stance || '—')}</b><small>${esc(o.generatedAt.slice(0, 10))}</small></div><div class="ol-hl-w"><p class="ol-hl">${cites([ai.headline])[0]}</p><div class="ol-kpis"><span>P(fall ≥10%) <b>${S.filter(x => ['correction', 'bear', 'crash'].includes(x.id)).reduce((t, x) => t + x.probability, 0)}%</b></span><span>P(bear or crash) <b>${S.filter(x => ['bear', 'crash'].includes(x.id)).reduce((t, x) => t + x.probability, 0)}%</b></span><span>Most likely <b>${OL[S.reduce((a, b) => (b.probability > a.probability ? b : a), S[0]).id][0]}</b></span></div></div></div>
@@ -1160,17 +1163,21 @@
         <div class="ol-tf" role="row"><span class="ol-c1" role="cell"><span class="ol-n">Probability-weighted</span><span class="ol-h">Σ likelihood × range midpoint</span></span><span class="ol-c2" role="cell"><span class="xs muted">P(fall ≥10%) <b class="mono">${S.filter(x => ['correction', 'bear', 'crash'].includes(x.id)).reduce((t, x) => t + x.probability, 0)}%</b></span></span><span class="ol-c3" role="cell"></span><span class="ol-c4" role="cell">${evCell('SPX')}</span><span class="ol-c5" role="cell">${evCell('USDIDR')}</span><span></span></div>
       </div>
       <div id="ol-detail" class="ol-stack">${S.map(x => `<div class="ol-pane ${open === x.id ? 'on' : ''}" data-pane="${x.id}">${det(x)}</div>`).join('')}</div>
+      <div class="ol-sub"><span class="ol-l">Conditions by theme</span><span class="ol-key"><i class="bad"></i>risk<i></i>neutral<i class="ok"></i>supportive</span></div>
       <div class="ol-cond">${(ai.conditions || []).map(c => `<div class="ol-c ${dirCls[c.direction] || ''}" title="${esc(c.direction || '')}"><i></i><b>${esc(c.theme)}</b><span>${cites([c.read])[0]}</span></div>`).join('')}</div>
-      <div class="ol-foot">
-        <div><span class="ol-l">Versus past crashes</span><p>${cites([ai.history])[0] || '—'}</p></div>
-        <div><span class="ol-l">Indonesia</span><p>${cites([ai.indonesia])[0] || '—'}</p></div>
-        <div><span class="ol-l">Would change this view</span><ul>${cites(ai.wouldChangeMyMind).map(t => `<li>${t}</li>`).join('')}</ul><span class="ol-l">How the odds were set</span><p class="xs muted">${cites([ai.baseRateNote])[0] || ''}</p></div>
-      </div>
+      <section class="ol-ctx" aria-label="Context for the outlook">
+        <div class="ol-ctx-h"><span class="ol-l">Context</span><div class="seg" role="tablist">${OLCTX.map(([k, l]) => `<button type="button" role="tab" data-ctx="${k}" class="${olState.ctx === k ? 'active' : ''}" aria-selected="${olState.ctx === k}">${l}</button>`).join('')}</div></div>
+        <div class="ol-ctx-b" data-pane-ctx="history" ${olState.ctx === 'history' ? '' : 'hidden'}>${sentences(ai.history)}</div>
+        <div class="ol-ctx-b" data-pane-ctx="indonesia" ${olState.ctx === 'indonesia' ? '' : 'hidden'}>${sentences(ai.indonesia)}</div>
+        <div class="ol-ctx-b" data-pane-ctx="change" ${olState.ctx === 'change' ? '' : 'hidden'}><ul>${cites(ai.wouldChangeMyMind).map(t => `<li>${t}</li>`).join('') || '<li class="muted">—</li>'}</ul></div>
+        <div class="ol-ctx-b" data-pane-ctx="odds" ${olState.ctx === 'odds' ? '' : 'hidden'}>${sentences(ai.baseRateNote)}</div>
+      </section>
       ${r.history && r.history.length > 1 ? `<div class="ol-hist"><span class="ol-l">Daily track</span><div id="ol-chart" class="ol-ch"></div></div>` : ''}
       ${o.changes ? `<p class="xs muted">Since the previous outlook (${fmt.time(o.changes.previousAt)}): ${o.changes.deltas.filter(d => d.delta).map(d => `${OL[d.id][0]} ${d.from}% → ${d.to}%`).join(', ') || 'no change in the odds'}${o.changes.previousStance !== ai.stance ? ` · stance ${esc(o.changes.previousStance)} → ${esc(ai.stance)}` : ''}.</p>` : ''}`,
       foot: 'Probabilities are the calibrated judgement of the model, anchored on base rates (a 10% correction about once a year, a 20% bear every 3–5 years, a crash once in 10–15 years), moved by the conditions measured on this page. Verified facts come from the inputs; the rest is interpretation, not a forecast. Rewritten daily when the schedule is on.' });
     const pick = (id) => { olState.open = id; $$('#ol-box [data-ol]').forEach(x => { const on = x.dataset.ol === id; x.classList.toggle('open', on); x.setAttribute('aria-expanded', String(on)); }); $$('#ol-detail .ol-pane').forEach(pn => pn.classList.toggle('on', pn.dataset.pane === id)); };
     $$('#ol-box [data-ol]').forEach(b => b.onclick = () => pick(b.dataset.ol));
+    $$('#ol-box [data-ctx]').forEach(b => b.onclick = () => { olState.ctx = b.dataset.ctx; $$('#ol-box [data-ctx]').forEach(x => { const on = x === b; x.classList.toggle('active', on); x.setAttribute('aria-selected', String(on)); }); $$('#ol-box [data-pane-ctx]').forEach(pn => { pn.hidden = pn.dataset.paneCtx !== olState.ctx; }); });
     if (r.history && r.history.length > 1) {
       const T = tok(); const C = { bull: T.up, base: T.fg3, correction: T.warn, bear: T.c3, crash: T.down };
       chart('#ol-chart', { grid: { left: 8, right: 8, top: 24, bottom: 6, containLabel: true }, legend: { top: 0, left: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: { color: T.fg2, fontSize: 11 * fs() } }, tooltip: { trigger: 'axis', valueFormatter: v => v + '%' }, xAxis: { type: 'category', data: r.history.map(h => h.generatedAt.slice(5, 10)), ...axis(T), splitLine: { show: false } }, yAxis: { type: 'value', max: 100, ...axis(T), axisLabel: { color: T.fg3, fontSize: 10.5 * fs(), formatter: v => v + '%' } }, series: SCEN.map(id => ({ name: OL[id][0], type: 'line', stack: 'p', areaStyle: { opacity: .55 }, lineStyle: { width: 1, color: C[id] }, itemStyle: { color: C[id] }, showSymbol: false, data: r.history.map(h => h.probabilities[id] || 0) })) });

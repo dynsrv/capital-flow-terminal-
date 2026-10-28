@@ -1669,3 +1669,24 @@ table.t.wb-t td > div.xs.nowrap { white-space: nowrap; }
 }
 .ol-main .ol-cols, #ol-detail .ol-cols { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 1100px) { #ol-detail .ol-cols { grid-template-columns: minmax(0, 1fr); } }
+
+/* outlook: themed conditions (even 5 × 2 grid) and a tabbed context panel whose text flows in columns */
+.ol-sub { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: -6px; }
+.ol-sub .ol-l { margin: 0; }
+.ol-key { display: inline-flex; align-items: center; gap: 6px; font-size: calc(10.5px * var(--fs, 1)); color: var(--fg-3); }
+.ol-key i { width: 7px; height: 7px; border-radius: 50%; background: var(--fg-3); margin-left: 6px; }
+.ol-key i.bad { background: var(--down); } .ol-key i.ok { background: var(--up); }
+.ol-cond { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.ol-c { height: 100%; box-sizing: border-box; align-content: start; }
+.ol-c b::first-letter { text-transform: uppercase; }
+.ol-c span { overflow-wrap: anywhere; }
+.ol-ctx { border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); overflow: hidden; }
+.ol-ctx-h { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 10px 8px 14px; border-bottom: 1px solid var(--line); }
+.ol-ctx-h .ol-l { margin: 0; }
+.ol-ctx-b { padding: 12px 16px 6px; columns: 3 300px; column-gap: 32px; column-rule: 1px solid var(--line); }
+.ol-ctx-b[hidden] { display: none; }
+.ol-ctx-b p { break-inside: avoid; margin: 0 0 10px; font-size: calc(12.5px * var(--fs, 1)); line-height: 1.6; }
+.ol-ctx-b ul { margin: 0 0 8px; padding-left: 16px; font-size: calc(12.5px * var(--fs, 1)); line-height: 1.55; }
+.ol-ctx-b li { break-inside: avoid; margin-bottom: 4px; }
+@media (max-width: 1100px) { .ol-cond { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .ol-cond { grid-template-columns: minmax(0, 1fr); } .ol-ctx-h { padding: 8px 10px; } .ol-ctx-h .seg { width: 100%; } }
