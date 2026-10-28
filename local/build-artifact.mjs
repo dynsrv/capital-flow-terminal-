@@ -27,7 +27,8 @@ routes.push(...riskIds.map(id => `/risk/trend?id=${id}&window=1Y`), ...['SPX', '
 const key = (p) => p.split('?')[0] + '?' + (p.split('?')[1] || '').split('&').filter(Boolean).sort().join('&');
 const data = {};
 for (const r of routes) {
-  const j = await (await fetch(base + '/api' + r)).json();
+  const PROD = ['/intel/outlook', '/intel/reading']; const src = PROD.includes(r) && process.env.PROD_BASE ? process.env.PROD_BASE : base; // model-written docs come from production
+  const j = await (await fetch(src + '/api' + r)).json();
   if (!j.ok) { console.log('skip', r, j.error); continue; }
   if (r.startsWith('/history')) { delete j.volumes; delete j.marketCaps; j.points = j.points.map(([d, v]) => [d, Number(v.toPrecision(6))]); }
   if (r.startsWith('/risk/trend') && !r.includes('1Y')) { const k = (a) => a.filter((_, i) => i % 3 === 0 || i === a.length - 1); j.price = k(j.price); j.ma50 = k(j.ma50); j.ma200 = k(j.ma200); }
