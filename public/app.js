@@ -23,6 +23,7 @@
     logout: '<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="m10 17-5-5 5-5"/><path d="M5 12h11"/>',
     back: '<path d="m15 18-6-6 6-6"/>',
     home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
     help: '<circle cx="12" cy="12" r="9.5"/><path d="M9.4 9.2a2.7 2.7 0 0 1 5.2 1c0 1.9-2.6 2.4-2.6 4.1"/><path d="M12 17.6h.01"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
@@ -788,8 +789,8 @@
         ${card({ icon: 'swap', title: 'Correlations that are changing', sub: '30-day vs one-year correlation for the selected set', bodyClass: 'flush', body: '<div class="tbl"><table class="t" id="corr-shift"></table></div>', foot: 'A sign flip or a large gap marks a relationship that is shifting. Both figures are measured; the reading is yours.' })}
       </div>
       <div class="grid g-2">
-        ${card({ icon: 'line', title: 'Relative performance', sub: 'Rebased to 100 at the start of the window', actions: `${pickerBtn('rel-pick', a.relIds.length)}<span id="rel-win"></span>`, body: '<div id="rel-chart" class="ch-lg ch"></div>', foot: 'Yields and spreads are plotted in their own units on the right axis. Crypto history covers 365 days unless a CoinGecko key is set.' })}
-        ${card({ icon: 'pulse', title: 'Rolling correlation', sub: '30-observation window', actions: `<select id="roll-a" aria-label="First instrument">${assetOpts(a.rollA, x => x.cls !== 'macro' || x.id === 'VIX')}</select><select id="roll-b" aria-label="Second instrument">${assetOpts(a.rollB, x => x.cls !== 'macro' || x.id === 'VIX')}</select><span id="roll-win"></span>`, body: '<div id="roll-chart" class="ch-lg ch"></div>', foot: 'Sustained moves toward ±1, or a change of sign, often line up with regime shifts, for example stocks and bonds falling together in inflationary periods.' })}
+        ${card({ icon: 'line', title: 'Relative performance', sub: 'Rebased to 100 at the start of the window', actions: `${pickerBtn('rel-pick', a.relIds.length)}<span id="rel-win"></span>`, bodyClass: 'grow', body: '<div id="rel-chart" class="ch-lg ch"></div>', foot: 'Yields and spreads are plotted in their own units on the right axis. Crypto history covers 365 days unless a CoinGecko key is set.' })}
+        ${card({ icon: 'pulse', title: 'Rolling correlation', sub: '30-observation window', actions: '<span id="roll-win"></span>', bodyClass: 'grow', body: `<div class="roll-ctl"><select id="roll-a" aria-label="First instrument">${assetOpts(a.rollA, x => x.cls !== 'macro' || x.id === 'VIX')}</select><span class="roll-vs">vs</span><select id="roll-b" aria-label="Second instrument">${assetOpts(a.rollB, x => x.cls !== 'macro' || x.id === 'VIX')}</select></div><div id="roll-chart" class="ch-lg ch"></div>`, foot: 'Sustained moves toward ±1, or a change of sign, often line up with regime shifts, for example stocks and bonds falling together in inflationary periods.' })}
       </div>`;
     $('#lead-anchor').onchange = e => { a.anchor = e.target.value; drawLeaders(); };
     mount('#corr-win', seg(['7D', '30D', '90D', '1Y', '5Y'], a.window, w => { a.window = w; drawCorr(); }));
@@ -959,6 +960,65 @@
     const cl = an.changes && an.changes.cleared.length ? ` · cleared since previous: ${an.changes.cleared.join(', ')}` : '';
     return `Scanned ${fmt.time(an.scannedAt)} (${fmt.ago(an.scannedAt)}, ${an.trigger === 'admin' ? 'by admin' : 'scheduled'}) · ${sched}${an.nextScan ? ` · next ${fmt.time(an.nextScan).slice(11)}` : ''}${cl}`;
   };
+
+  /* ───────── Dropdown menus ─────────
+     Every <select> keeps its native element (value, change events and styling stay as they are), but with a mouse or
+     trackpad it opens this menu instead of the browser's list: same look in every browser, a check on the current
+     choice, group headings, and a filter box for long lists. Touch screens keep the native picker. */
+  const dd = { el: null, sel: null, items: [], idx: -1 };
+  const ddFine = () => window.matchMedia && matchMedia('(pointer: fine)').matches && innerWidth >= 760;
+  function ddClose(refocus = true) { if (!dd.el) return; dd.el.remove(); dd.el = null; if (dd.sel) { dd.sel.classList.remove('dd-open'); if (refocus) dd.sel.focus({ preventScroll: true }); } dd.sel = null; window.removeEventListener('scroll', ddOnScroll, true); window.removeEventListener('resize', ddCloseNoFocus); }
+  const ddCloseNoFocus = () => ddClose(false);
+  const ddOnScroll = (e) => { if (dd.el && !dd.el.contains(e.target)) ddClose(false); };
+  function ddPick(i) { const it = dd.items[i]; if (!it || it.disabled) return; const sel = dd.sel; ddClose(); if (sel.value !== it.value) { sel.value = it.value; sel.dispatchEvent(new Event('input', { bubbles: true })); sel.dispatchEvent(new Event('change', { bubbles: true })); } }
+  function ddMove(i) { const vis = dd.items.map((x, k) => k).filter(k => !dd.items[k].hidden && !dd.items[k].disabled); if (!vis.length) return; if (!vis.includes(i)) i = vis[0]; dd.idx = i; $$('.dd-item', dd.el).forEach(b => b.classList.toggle('active', Number(b.dataset.i) === i)); const b = $(`.dd-item[data-i="${i}"]`, dd.el); if (b) b.scrollIntoView({ block: 'nearest' }); }
+  function ddOpen(sel) {
+    ddClose(false);
+    const items = []; let html = '';
+    for (const node of sel.children) {
+      if (node.tagName === 'OPTGROUP') { html += `<div class="dd-group">${esc(node.label)}</div>`; for (const o of node.children) { items.push({ value: o.value, label: o.textContent, disabled: o.disabled }); html += ddRow(items.length - 1, o, sel); } }
+      else if (node.tagName === 'OPTION') { items.push({ value: node.value, label: node.textContent, disabled: node.disabled }); html += ddRow(items.length - 1, node, sel); }
+    }
+    const long = items.length > 12;
+    const m = document.createElement('div'); m.className = 'dd-menu'; m.setAttribute('role', 'listbox');
+    m.innerHTML = (long ? `<div class="dd-search">${ic('search')}<input type="text" placeholder="Filter…" aria-label="Filter options" autocomplete="off" spellcheck="false"></div>` : '') + `<div class="dd-list">${html}</div>`;
+    document.body.appendChild(m); dd.el = m; dd.sel = sel; dd.items = items; sel.classList.add('dd-open');
+    const r = sel.getBoundingClientRect();
+    const w = Math.min(Math.max(r.width, Math.min(m.offsetWidth, 340)), innerWidth - 16); m.style.width = w + 'px';
+    const below = innerHeight - r.bottom - 12, above = r.top - 12; const up = below < 240 && above > below;
+    m.style.maxHeight = Math.min(380, Math.max(160, up ? above : below)) + 'px';
+    const left = r.left + w > innerWidth - 8 ? r.right - w : r.left; m.style.left = Math.max(8, left) + 'px';
+    if (up) m.style.bottom = (innerHeight - r.top + 6) + 'px'; else m.style.top = (r.bottom + 6) + 'px';
+    m.classList.toggle('up', up);
+    ddMove(sel.selectedIndex >= 0 ? sel.selectedIndex : 0);
+    m.addEventListener('mousedown', e => { if (!e.target.closest('input')) e.preventDefault(); });
+    m.addEventListener('click', e => { const b = e.target.closest('.dd-item'); if (b) ddPick(Number(b.dataset.i)); });
+    m.addEventListener('mousemove', e => { const b = e.target.closest('.dd-item'); if (b && Number(b.dataset.i) !== dd.idx) ddMove(Number(b.dataset.i)); });
+    const q = $('.dd-search input', m);
+    if (q) { q.addEventListener('input', () => { const t = q.value.trim().toLowerCase(); $$('.dd-item', m).forEach(b => { const it = dd.items[Number(b.dataset.i)]; it.hidden = !!t && !it.label.toLowerCase().includes(t); b.hidden = it.hidden; }); $$('.dd-group', m).forEach(g => { let n = g.nextElementSibling, any = false; while (n && !n.classList.contains('dd-group')) { if (!n.hidden) any = true; n = n.nextElementSibling; } g.hidden = !any; }); ddMove(dd.idx); }); q.addEventListener('keydown', ddKeys); setTimeout(() => q.focus(), 0); }
+    window.addEventListener('scroll', ddOnScroll, true); window.addEventListener('resize', ddCloseNoFocus);
+  }
+  function ddRow(i, o, sel) { const on = o.value === sel.value; return `<button type="button" class="dd-item ${on ? 'on' : ''}" data-i="${i}" role="option" aria-selected="${on}" ${o.disabled ? 'disabled' : ''}><span class="dd-l">${esc(o.textContent)}</span>${on ? `<span class="dd-ck">${ic('check')}</span>` : ''}</button>`; }
+  function ddKeys(e) {
+    if (!dd.el) return;
+    const vis = dd.items.map((x, k) => k).filter(k => !dd.items[k].hidden && !dd.items[k].disabled); const pos = vis.indexOf(dd.idx);
+    if (e.key === 'ArrowDown') { e.preventDefault(); ddMove(vis[Math.min(vis.length - 1, pos + 1)]); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); ddMove(vis[Math.max(0, pos - 1)]); }
+    else if (e.key === 'Home') { e.preventDefault(); ddMove(vis[0]); } else if (e.key === 'End') { e.preventDefault(); ddMove(vis[vis.length - 1]); }
+    else if (e.key === 'Enter') { e.preventDefault(); ddPick(dd.idx); }
+    else if (e.key === 'Escape' || e.key === 'Tab') { e.preventDefault(); e.stopPropagation(); ddClose(); }
+  }
+  document.addEventListener('mousedown', (e) => {
+    if (dd.el && !dd.el.contains(e.target) && e.target !== dd.sel) ddClose(false);
+    const sel = e.target.closest && e.target.closest('select');
+    if (!sel || sel.disabled || sel.multiple || sel.dataset.native != null || !ddFine() || e.button !== 0) return;
+    e.preventDefault(); if (dd.sel === sel) { ddClose(); return; } sel.focus({ preventScroll: true }); ddOpen(sel);
+  }, true);
+  document.addEventListener('keydown', (e) => {
+    if (dd.el) { if (!e.target.closest || !e.target.closest('.dd-search')) ddKeys(e); return; }
+    const sel = e.target; if (!sel || sel.tagName !== 'SELECT' || sel.disabled || sel.multiple || sel.dataset.native != null || !ddFine()) return;
+    if (['Enter', ' ', 'ArrowDown', 'ArrowUp'].includes(e.key) && !e.altKey) { e.preventDefault(); ddOpen(sel); }
+  }, true);
 
   /* ───────── 2020–2023 episodes: before / during / impact ───────── */
   const condRowHtml = (c) => `<div class="cond ${c.hit === null ? 'na' : c.hit ? 'hit' : 'miss'}"><i></i><div class="cl"><b>${esc(c.label)}${c.basis ? ` <span class="badge estimate">${c.basis}</span>` : ''}</b><span class="then">Then: ${esc(c.then)}</span>${c.note ? `<span class="then">${esc(c.note)}</span>` : ''}</div><div class="cn">${esc(c.now)}</div></div>`;

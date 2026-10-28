@@ -1371,3 +1371,35 @@ body.admin-mode #help-btn { display: none !important; }
 .an-chip { display: inline-block; margin: 0 4px 2px 0; padding: 1px 7px; border-radius: 5px; font: 500 calc(11px * var(--fs, 1)) var(--mono); background: var(--surface-2); border: 1px solid var(--line-2); }
 .an-chip.add { color: var(--accent); } .an-chip.clr { color: var(--fg-3); } .an-chip.esc { color: var(--warn); }
 @media (max-width: 900px) { .anx-modes { grid-template-columns: minmax(0, 1fr); } .an-meta { text-align: left; } }
+
+/* ───────── dropdowns: one simple, clean style for every select, and the menu it opens ───────── */
+select, .input-select {
+  height: var(--ctl-h); border-radius: var(--ctl-r); border: 1px solid var(--line-2); background-color: var(--surface-2);
+  padding: 0 32px 0 12px; font-size: calc(12.5px * var(--fs, 1)); font-weight: 500; color: var(--fg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a8a93' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; background-size: 14px 14px; box-shadow: none;
+}
+select:hover { border-color: var(--fg-3); background-color: var(--surface-2); }
+select.dd-open, select:focus-visible { outline: none; border-color: #fb8b1e; box-shadow: 0 0 0 3px color-mix(in srgb, #fb8b1e 16%, transparent); }
+.dd-menu { position: fixed; z-index: 120; display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line-2); border-radius: 10px; box-shadow: 0 14px 40px rgba(0, 0, 0, .38), 0 2px 6px rgba(0, 0, 0, .2); overflow: hidden; animation: dd-in .12s ease-out; transform-origin: top; }
+.dd-menu.up { transform-origin: bottom; }
+@keyframes dd-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } }
+.dd-menu.up { animation-name: dd-in-up; } @keyframes dd-in-up { from { opacity: 0; transform: translateY(4px) scale(.98); } }
+.dd-search { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line); color: var(--fg-3); }
+.dd-search svg { width: 14px; height: 14px; flex: none; }
+.dd-search input { flex: 1; min-width: 0; height: 28px !important; border: 0 !important; background: transparent !important; box-shadow: none !important; padding: 0 !important; font-size: calc(12.5px * var(--fs, 1)); color: var(--fg); }
+.dd-list { overflow-y: auto; padding: 4px; overscroll-behavior: contain; }
+.dd-group { padding: 8px 10px 4px; font-size: calc(10.5px * var(--fs, 1)); font-weight: 600; color: var(--fg-3); letter-spacing: .02em; }
+.dd-item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 32px; padding: 6px 10px; border: 0; border-radius: 6px; background: transparent; color: var(--fg-2); font: 500 calc(12.5px * var(--fs, 1)) var(--font); text-align: left; cursor: pointer; }
+.dd-item .dd-l { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dd-item.active { background: var(--raised); color: var(--fg); }
+.dd-item.on { color: var(--fg); font-weight: 600; }
+.dd-item:disabled { opacity: .45; cursor: default; }
+.dd-ck { display: inline-flex; color: #fb8b1e; } .dd-ck svg { width: 14px; height: 14px; stroke-width: 2.4; }
+
+/* rolling correlation: instrument pickers in one row, chart fills the card */
+.roll-ctl { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 8px; align-items: center; margin-bottom: 12px; }
+.roll-ctl select { width: 100%; min-width: 0; }
+.roll-vs { font-size: calc(12px * var(--fs, 1)); color: var(--fg-3); }
+.card-b.grow { flex: 1 1 auto; display: flex; flex-direction: column; }
+.card-b.grow > .ch { flex: 1 1 auto; min-height: 360px; height: auto; }
