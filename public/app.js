@@ -1147,8 +1147,8 @@
       return `<span class="ol-l">USD/IDR ${nf('USDIDR', r.low)}–${nf('USDIDR', r.high)}</span><p>${r.why ? esc(r.why) : ''}${pc != null ? `<span class="ol-q">Midpoint ${mv > 0 ? '+' : ''}${mv.toFixed(1)}% vs spot ${nf('USDIDR', sp)}: ${mv >= 0 ? `a weaker rupiah than in ${pc}%` : `a firmer rupiah than in ${100 - pc}%`} of ${d.n === 126 ? '6' : '3'}-month periods since ${String(d.from).slice(0, 4)}.</span>` : ''}</p>`; };
     const det = (x) => `<div class="ol-det ${x.id}"><div class="ol-det-h"><b>${OL[x.id][0]} · ${x.probability}%</b><span class="xs muted">${esc(OL[x.id][1])}${x.horizon ? ` · ${esc(x.horizon)}` : ''}</span></div>
       <div class="ol-cols">
-        <div><span class="ol-l">Path</span><p>${cites([x.path])[0] || '—'}</p>${fxLine(x)}${x.analog ? `<span class="ol-l">Resembles</span><p>${cites([x.analog])[0]}</p>` : ''}</div>
-        <div><span class="ol-l">What makes it likelier</span><ul>${cites(x.drivers).map(t => `<li>${t}</li>`).join('') || '<li class="muted">—</li>'}</ul></div>
+        <div><span class="ol-l">Path</span><p>${cites([x.path])[0] || '—'}</p>${x.analog ? `<span class="ol-l">Resembles</span><p>${cites([x.analog])[0]}</p>` : ''}</div>
+        <div><span class="ol-l">What makes it likelier</span><ul>${cites(x.drivers).map(t => `<li>${t}</li>`).join('') || '<li class="muted">—</li>'}</ul>${fxLine(x)}</div>
         <div><span class="ol-l">Triggers to watch</span><ul>${cites(x.triggers).map(t => `<li>${t}</li>`).join('') || '<li class="muted">—</li>'}</ul>${(x.watch || []).length ? `<span class="ol-l">Gauges</span><p class="xs">${cites(x.watch).join(' · ')}</p>` : ''}</div>
       </div></div>`;
     const stance = { 'risk-on': 'up', neutral: '', cautious: 'warn-c', defensive: 'down' }[ai.stance] || '';
