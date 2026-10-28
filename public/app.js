@@ -1116,7 +1116,7 @@
     const dirCls = { supportive: 'ok', neutral: '', risk: 'bad' };
     const cites = (arr) => (arr || []).map(x => esc(x).replace(/\[(\d+)\]/g, (m, n) => { const it = (o.news || []).find(k => k.n === Number(n)); return it ? `<a href="${esc(it.url)}" target="_blank" rel="noopener" class="ol-cite">[${n}]</a>` : m; }));
     const open = olState.open || S.reduce((a, b) => (b.probability > a.probability ? b : a), S[0]).id;
-    const sc = (x) => `<button type="button" class="ol-s ${x.id} ${open === x.id ? 'open' : ''}" data-ol="${x.id}" aria-expanded="${open === x.id}"><span class="ol-p"><b>${x.probability}</b><small>%</small><span class="ol-n">${OL[x.id][0]}</span>${dl(x.id)}</span><span class="ol-h">${esc(x.horizon || '')}</span></button>`;
+    const sc = (x) => `<button type="button" class="ol-s ${x.id} ${open === x.id ? 'open' : ''}" data-ol="${x.id}" aria-expanded="${open === x.id}" title="${OL[x.id][0]} ${x.probability}% · ${esc(x.horizon || '')}"><span class="ol-n">${OL[x.id][0]}${dl(x.id)}</span><span class="ol-h">${esc(x.horizon || '')}</span></button>`;
     const det = (x) => `<div class="ol-det ${x.id}"><div class="ol-det-h"><b>${OL[x.id][0]} · ${x.probability}%</b><span class="xs muted">${esc(OL[x.id][1])}${x.horizon ? ` · ${esc(x.horizon)}` : ''}</span></div>
       <div class="ol-cols">
         <div><span class="ol-l">Path</span><p>${cites([x.path])[0] || '—'}</p>${x.analog ? `<span class="ol-l">Resembles</span><p>${cites([x.analog])[0]}</p>` : ''}</div>
@@ -1126,9 +1126,13 @@
     const stance = { 'risk-on': 'up', neutral: '', cautious: 'warn-c', defensive: 'down' }[ai.stance] || '';
     box.innerHTML = card({ icon: 'compass', cls: 'ol-card', title: 'Market outlook: five scenarios', sub: 'Likelihood over the next 3–6 months, from the measured inputs on this page, the headlines of the day and the pre-conditions of past crashes', actions: `<span class="badge ${r.stale ? 'mid' : 'measured'}" title="${esc(o.generatedAt)}">${r.stale ? 'may be outdated' : 'current'}</span><span class="xs muted">${fmt.ago(o.generatedAt)} · ${esc(o.model || '')} · ${o.trigger === 'schedule' ? 'scheduled' : 'manual'}</span><span class="badge ai">AI judgement</span>${refreshBtn}`, body: `
       <div class="ol-hero ${stance}"><div class="ol-stance ${stance}"><span>Stance</span><b>${esc(ai.stance || '—')}</b><small>${esc(o.generatedAt.slice(0, 10))}</small></div><div class="ol-hl-w"><p class="ol-hl">${cites([ai.headline])[0]}</p><div class="ol-kpis"><span>P(fall ≥10%) <b>${S.filter(x => ['correction', 'bear', 'crash'].includes(x.id)).reduce((t, x) => t + x.probability, 0)}%</b></span><span>P(bear or crash) <b>${S.filter(x => ['bear', 'crash'].includes(x.id)).reduce((t, x) => t + x.probability, 0)}%</b></span><span>Most likely <b>${OL[S.reduce((a, b) => (b.probability > a.probability ? b : a), S[0]).id][0]}</b></span></div></div></div>
-      <div class="ol-spec" role="img" aria-label="Probability split across the five scenarios">${S.map(x => `<span class="ol-seg ${x.id}" style="flex:${x.probability} 1 0" title="${OL[x.id][0]} ${x.probability}%">${x.probability >= 8 ? `<b>${x.probability}%</b><small>${OL[x.id][0]}</small>` : ''}</span>`).join('')}</div>
-      <div class="ol-row">${S.map(sc).join('')}</div>
-      <div id="ol-detail" class="ol-stack">${S.map(x => `<div class="ol-pane ${open === x.id ? 'on' : ''}" data-pane="${x.id}">${det(x)}</div>`).join('')}</div>
+      <div class="ol-main">
+        <div class="ol-viz">
+          <div class="ol-dial"><div id="ol-donut" class="ol-donut" role="img" aria-label="Probability split across the five scenarios: ${S.map(x => `${OL[x.id][0]} ${x.probability}%`).join(', ')}"></div><div class="ol-mid" id="ol-mid"></div></div>
+          <div class="ol-row">${S.map(sc).join('')}</div>
+        </div>
+        <div id="ol-detail" class="ol-stack">${S.map(x => `<div class="ol-pane ${open === x.id ? 'on' : ''}" data-pane="${x.id}">${det(x)}</div>`).join('')}</div>
+      </div>
       <div class="ol-cond">${(ai.conditions || []).map(c => `<div class="ol-c ${dirCls[c.direction] || ''}" title="${esc(c.direction || '')}"><i></i><b>${esc(c.theme)}</b><span>${cites([c.read])[0]}</span></div>`).join('')}</div>
       <div class="ol-foot">
         <div><span class="ol-l">Versus past crashes</span><p>${cites([ai.history])[0] || '—'}</p></div>
@@ -1138,7 +1142,29 @@
       ${r.history && r.history.length > 1 ? `<div class="ol-hist"><span class="ol-l">Daily track</span><div id="ol-chart" class="ol-ch"></div></div>` : ''}
       ${o.changes ? `<p class="xs muted">Since the previous outlook (${fmt.time(o.changes.previousAt)}): ${o.changes.deltas.filter(d => d.delta).map(d => `${OL[d.id][0]} ${d.from}% → ${d.to}%`).join(', ') || 'no change in the odds'}${o.changes.previousStance !== ai.stance ? ` · stance ${esc(o.changes.previousStance)} → ${esc(ai.stance)}` : ''}.</p>` : ''}`,
       foot: 'Probabilities are the calibrated judgement of the model, anchored on base rates (a 10% correction about once a year, a 20% bear every 3–5 years, a crash once in 10–15 years), moved by the conditions measured on this page. Verified facts come from the inputs; the rest is interpretation, not a forecast. Rewritten daily when the schedule is on.' });
-    $$('#ol-box [data-ol]').forEach(b => b.onclick = () => { olState.open = b.dataset.ol; $$('#ol-box [data-ol]').forEach(x => { x.classList.toggle('open', x === b); x.setAttribute('aria-expanded', String(x === b)); }); $$('#ol-detail .ol-pane').forEach(pn => pn.classList.toggle('on', pn.dataset.pane === b.dataset.ol)); });
+    // Half doughnut: scenarios run left to right from best to worst, like a dial; the share sits inside each arc.
+    const T0 = tok(); const SC = { bull: T0.up, base: T0.fg3, correction: T0.warn, bear: '#ff6a3d', crash: T0.down };
+    const midHtml = (id) => { const x = S.find(s => s.id === id); return `<b class="${id}">${x.probability}<small>%</small></b><span>${OL[id][0]}</span><em>${esc(x.horizon || '')}</em>`; };
+    const pick = (id) => {
+      olState.open = id;
+      $$('#ol-box [data-ol]').forEach(x => { const on = x.dataset.ol === id; x.classList.toggle('open', on); x.setAttribute('aria-expanded', String(on)); });
+      $$('#ol-detail .ol-pane').forEach(pn => pn.classList.toggle('on', pn.dataset.pane === id));
+      const m = $('#ol-mid'); if (m) m.innerHTML = midHtml(id);
+      if (dc) dc.setOption({ series: [{ data: donutData(id) }] });
+    };
+    const donutData = (sel) => S.map(x => ({ name: OL[x.id][0], id: x.id, value: x.probability, itemStyle: { color: SC[x.id] }, selected: sel === x.id,
+      label: x.probability >= 6 ? { position: 'inside', formatter: '{d|' + x.probability + '%}', rich: { d: { fontFamily: T0.mono, fontWeight: 700, fontSize: 13 * fs(), color: x.id === 'base' ? T0.bg : '#000' } } }
+        : { position: 'outside', formatter: x.probability + '%', color: T0.fg2, fontFamily: T0.mono, fontWeight: 700, fontSize: 11.5 * fs() },
+      labelLine: { show: x.probability < 6, length: 6, length2: 4, lineStyle: { color: T0.line2 } } }));
+    const dn = $('#ol-donut'); let dc = null;
+    if (dn) {
+      const w = dn.clientWidth || 360, h = dn.clientHeight || 200; const R = Math.max(80, Math.min(w / 2 - 34, h - 16));
+      dc = chart(dn, { animationDuration: 500, tooltip: { trigger: 'item', formatter: p => `<b>${p.name}</b> ${p.value}%<br><span style="opacity:.7">${esc(OL[p.data.id][1])}</span>` },
+        series: [{ type: 'pie', startAngle: 180, endAngle: 360, clockwise: true, center: [w / 2, h - 4], radius: [Math.round(R * .6), R], padAngle: 1.2, selectedMode: 'single', selectedOffset: 7, itemStyle: { borderRadius: 4 }, avoidLabelOverlap: false, emphasis: { scale: true, scaleSize: 4 }, data: donutData(open) }] });
+      if (dc) { dc.off('click'); dc.on('click', p => p.data && pick(p.data.id)); }
+    }
+    pick(open);
+    $$('#ol-box [data-ol]').forEach(b => b.onclick = () => pick(b.dataset.ol));
     if (r.history && r.history.length > 1) {
       const T = tok(); const C = { bull: T.up, base: T.fg3, correction: T.warn, bear: T.c3, crash: T.down };
       chart('#ol-chart', { grid: { left: 8, right: 8, top: 24, bottom: 6, containLabel: true }, legend: { top: 0, left: 0, icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: { color: T.fg2, fontSize: 11 * fs() } }, tooltip: { trigger: 'axis', valueFormatter: v => v + '%' }, xAxis: { type: 'category', data: r.history.map(h => h.generatedAt.slice(5, 10)), ...axis(T), splitLine: { show: false } }, yAxis: { type: 'value', max: 100, ...axis(T), axisLabel: { color: T.fg3, fontSize: 10.5 * fs(), formatter: v => v + '%' } }, series: SCEN.map(id => ({ name: OL[id][0], type: 'line', stack: 'p', areaStyle: { opacity: .55 }, lineStyle: { width: 1, color: C[id] }, itemStyle: { color: C[id] }, showSymbol: false, data: r.history.map(h => h.probabilities[id] || 0) })) });

@@ -1610,16 +1610,33 @@ table.t.wb-t td > div.xs.nowrap { white-space: nowrap; }
 .ol-hl { font-size: calc(13px * var(--fs, 1)); line-height: 1.55; color: var(--fg); }
 .ol-kpis { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: calc(12px * var(--fs, 1)); color: var(--fg-3); }
 .ol-kpis b { font-family: var(--mono); color: var(--fg); font-size: calc(13px * var(--fs, 1)); margin-left: 4px; }
-.ol-spec { display: flex; height: 34px; border-radius: 8px; overflow: hidden; gap: 2px; }
-.ol-seg { display: flex; align-items: center; justify-content: center; gap: 6px; min-width: 6px; color: #000; font-family: var(--mono); overflow: hidden; white-space: nowrap; }
-.ol-seg b { font-size: calc(12.5px * var(--fs, 1)); font-weight: 700; } .ol-seg small { font-size: calc(11px * var(--fs, 1)); font-weight: 600; opacity: .8; }
-.ol-seg.bull { background: var(--up); } .ol-seg.base { background: var(--fg-3); color: var(--bg); } .ol-seg.correction { background: var(--warn); } .ol-seg.bear { background: #ff6a3d; } .ol-seg.crash { background: var(--down); }
-.ol-s { padding: 10px 12px; gap: 4px; }
-.ol-s .ol-p { align-items: baseline; gap: 6px; }
-.ol-s .ol-p b { font-size: calc(22px * var(--fs, 1)); }
-.ol-s .ol-n { font-size: calc(13px * var(--fs, 1)); }
 .ol-stack { display: grid; }
 .ol-pane { grid-area: 1 / 1; visibility: hidden; }
 .ol-pane.on { visibility: visible; }
 .ol-pane .ol-det { height: 100%; box-sizing: border-box; }
-@media (max-width: 760px) { .ol-hero { grid-template-columns: minmax(0, 1fr); } .ol-hero .ol-stance { flex-direction: row; align-items: baseline; gap: 10px; border-right: 0; border-bottom: 1px solid var(--line); padding: 10px 14px; } .ol-spec { height: 28px; } .ol-seg small { display: none; } }
+@media (max-width: 760px) { .ol-hero { grid-template-columns: minmax(0, 1fr); } .ol-hero .ol-stance { flex-direction: row; align-items: baseline; gap: 10px; border-right: 0; border-bottom: 1px solid var(--line); padding: 10px 14px; } }
+
+/* outlook: half-doughnut dial (best → worst, left → right) with horizons underneath, detail beside it */
+.ol-main { display: grid; grid-template-columns: minmax(330px, 400px) minmax(0, 1fr); gap: 14px; align-items: stretch; }
+.ol-viz { display: flex; flex-direction: column; justify-content: center; gap: 10px; padding: 14px 14px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); min-width: 0; }
+.ol-dial { position: relative; }
+.ol-donut { height: 190px; width: 100%; }
+.ol-mid { position: absolute; left: 0; right: 0; bottom: 2px; display: flex; flex-direction: column; align-items: center; gap: 1px; pointer-events: none; }
+.ol-mid b { font: 600 calc(26px * var(--fs, 1)) var(--mono); line-height: 1; letter-spacing: -.02em; }
+.ol-mid b small { font-size: .5em; color: var(--fg-3); margin-left: 1px; }
+.ol-mid b.bull { color: var(--up); } .ol-mid b.base { color: var(--fg); } .ol-mid b.correction { color: var(--warn); } .ol-mid b.bear { color: #ff6a3d; } .ol-mid b.crash { color: var(--down); }
+.ol-mid span { font-weight: 600; font-size: calc(12.5px * var(--fs, 1)); }
+.ol-mid em { font-style: normal; font-family: var(--mono); font-size: calc(10.5px * var(--fs, 1)); color: var(--fg-3); }
+.ol-viz .ol-row { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; padding-top: 10px; border-top: 1px solid var(--line); }
+.ol-viz .ol-s { padding: 7px 6px 6px; gap: 2px; border-radius: 8px; background: transparent; border-color: transparent; align-items: center; text-align: center; }
+.ol-viz .ol-s::before { content: ''; width: 18px; height: 3px; border-radius: 2px; background: var(--sc); margin-bottom: 3px; }
+.ol-viz .ol-s:hover { background: var(--surface); border-color: var(--line); }
+.ol-viz .ol-s.open { background: color-mix(in srgb, var(--sc) 10%, var(--surface)); border-color: color-mix(in srgb, var(--sc) 55%, var(--line)); box-shadow: none; }
+.ol-viz .ol-n { display: flex; align-items: baseline; gap: 3px; font-size: calc(11.5px * var(--fs, 1)); white-space: nowrap; }
+.ol-viz .ol-n .ol-d { font-size: calc(9.5px * var(--fs, 1)); }
+.ol-viz .ol-h { font-family: var(--mono); font-size: calc(10px * var(--fs, 1)); white-space: normal; line-height: 1.25; }
+.ol-main .ol-stack { min-width: 0; }
+.ol-main .ol-cols { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1600px) { .ol-main .ol-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ol-main .ol-cols > div:last-child { grid-column: span 2; } }
+@media (max-width: 960px) { .ol-main { grid-template-columns: minmax(0, 1fr); } .ol-main .ol-cols { grid-template-columns: minmax(0, 1fr); } .ol-main .ol-cols > div:last-child { grid-column: auto; } }
+@media (max-width: 760px) { .ol-viz .ol-row { grid-template-columns: repeat(5, minmax(0, 1fr)); } .ol-viz .ol-row .ol-s.crash { grid-column: auto; } }
