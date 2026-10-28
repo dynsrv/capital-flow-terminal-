@@ -1637,9 +1637,9 @@ table.t.wb-t td > div.xs.nowrap { white-space: nowrap; }
 .ol-c2 { display: grid; grid-template-columns: minmax(0, 1fr) 48px; align-items: center; gap: 10px; }
 .ol-bar { position: relative; height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--fg-3) 16%, transparent); overflow: hidden; }
 .ol-bar i { position: absolute; inset: 0 auto 0 0; min-width: 3px; border-radius: 4px; background: var(--sc); }
-.ol-v { font: 600 calc(17px * var(--fs, 1)) var(--mono); text-align: right; color: var(--sc); letter-spacing: -.02em; }
+.ol-v { font: 600 calc(14px * var(--fs, 1)) var(--mono); text-align: right; color: var(--sc); letter-spacing: -.02em; }
 .ol-s.base .ol-v { color: var(--fg); }
-.ol-v small { font-size: .6em; color: var(--fg-3); margin-left: 1px; }
+.ol-v small { font-size: inherit; color: inherit; font-weight: inherit; margin-left: 0; }
 .ol-c3 { font-size: calc(11px * var(--fs, 1)); color: var(--fg-2); line-height: 1.3; }
 .ol-rg { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .ol-rg-t { display: flex; align-items: baseline; gap: 8px; font-family: var(--mono); font-size: calc(12px * var(--fs, 1)); white-space: nowrap; }
