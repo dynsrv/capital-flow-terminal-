@@ -17,6 +17,12 @@
     shock: '<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
     admin: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
     refresh: '<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/>',
+    users: '<circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.6 3.1-6 7-6s7 2.4 7 6"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18.5 14.4c2.1.8 3.5 2.8 3.5 5.6"/>',
+    lock: '<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
+    logout: '<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="m10 17-5-5 5-5"/><path d="M5 12h11"/>',
+    back: '<path d="m15 18-6-6 6-6"/>',
+    home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
     link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
@@ -74,7 +80,7 @@
     intel: { label: 'Intelligence', icon: 'intel', title: 'Market intelligence', sub: 'Anomalies, historical pattern checks and AI explanations' },
     shock: { label: 'Shock Sim', icon: 'shock', title: 'Shock simulator', sub: 'Historical sensitivities applied to a hypothetical move' },
     glossary: { label: 'Glossary', icon: 'book', title: 'Glossary and simple explanations for finance terms', sub: 'Every term used in this dashboard, in plain language, with where to see it' },
-    admin: { label: 'Admin', icon: 'admin', title: 'Admin', sub: 'API credentials, source health and reference data' },
+    admin: { label: 'Admin', icon: 'admin', title: 'Admin console', sub: 'Keys, members, real-time data, usage and settings' },
   };
 
   /* ───────── state ───────── */
@@ -105,6 +111,75 @@
     if (!j.ok) throw new Error(j.error || `API error ${r.status}`);
     $('#demo-banner').hidden = !j.demoMode;
     return j;
+  }
+
+  /* ───────── roles: visitor (delayed), member (PIN → live), admin (token) ───────── */
+  const auth = { m: store.get('cft:member', null), role: 'visitor' };
+  const memberTok = () => (auth.m && auth.m.token && new Date(auth.m.expiresAt) > new Date() ? auth.m.token : null);
+  const liveTok = () => state.admin.token || memberTok();
+  const liveHeaders = () => { const t = liveTok(); return t ? { authorization: 'Bearer ' + t } : {}; };
+  const isLive = () => !!liveTok();
+  function setMember(m) { auth.m = m; store.set('cft:member', m); syncRole(); }
+  function syncRole() {
+    const m = memberTok() ? auth.m : null; const admin = !!state.admin.token;
+    auth.role = admin ? 'admin' : m ? 'member' : 'visitor';
+    document.body.dataset.role = auth.role;
+    const b = $('#member-btn');
+    if (b) {
+      b.classList.toggle('on', !!m || admin);
+      b.innerHTML = m ? `<span class="mb-av">${esc((m.name || '?').trim().charAt(0).toUpperCase())}</span><span class="mb-t">${esc(m.name)}</span>` : admin ? `${ic('key')}<span class="mb-t">Admin</span>` : `${ic('user')}<span class="mb-t">Sign in</span>`;
+      b.title = m ? `Signed in as ${m.name} · live prices` : admin ? 'Admin session (this tab)' : 'Members: sign in with your PIN for live prices';
+    }
+    syncTickerTag();
+  }
+  function syncTickerTag() {
+    const t = $('#ticker-tag'); if (!t) return;
+    const live = document.body.classList.contains('rt-on');
+    t.className = 'ticker-tag ' + (live ? 'is-live' : isLive() ? 'member' : 'visitor');
+    t.innerHTML = live ? '<i></i>Live' : isLive() ? 'Delayed' : `Delayed<span class="tt-cta">· Sign in for live</span>`;
+    t.title = live ? 'Real-time prices are on for your session' : isLive() ? 'Real-time is switched off on the server; prices are delayed' : 'Visitors see delayed prices. Members sign in with a PIN for live prices.';
+  }
+  function openAccount() {
+    const m = memberTok() ? auth.m : null;
+    const ov = document.createElement('div'); ov.className = 'pin-ov'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
+    const close = () => { ov.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    document.addEventListener('keydown', onKey);
+    if (m) {
+      ov.innerHTML = `<div class="pin-card"><button class="icon-btn sm pin-x" aria-label="Close">${ic('x')}</button><div class="pin-av">${esc(m.name.charAt(0).toUpperCase())}</div><h3>${esc(m.name)}</h3><p class="dim sm">Member · signed in until ${esc(fmt.date(m.expiresAt))}</p>
+        <div class="kv pin-kv"><dt>Prices</dt><dd class="${document.body.classList.contains('rt-on') ? 'up' : 'muted'}">${document.body.classList.contains('rt-on') ? 'Live (real-time)' : 'Delayed: real-time is off on the server'}</dd><dt>Live TV</dt><dd>All channels, including relayed ones</dd></div>
+        <button class="btn ghost pin-out">${ic('logout')}Sign out</button></div>`;
+      $('.pin-out', ov).onclick = () => { setMember(null); close(); startRt(); loadCore().catch(() => {}); toast('Signed out. Prices are delayed.'); };
+    } else {
+      ov.innerHTML = `<div class="pin-card"><button class="icon-btn sm pin-x" aria-label="Close">${ic('x')}</button><div class="pin-ic">${ic('lock')}</div><h3>Member sign-in</h3><p class="dim sm">Enter your PIN for live prices and every TV channel. Visitors see delayed prices.</p>
+        <form class="pin-form" autocomplete="off"><input class="pin-in" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="10" autocomplete="one-time-code" placeholder="••••••" aria-label="PIN"><div class="pin-dots" aria-hidden="true"></div>
+        <div class="pin-pad">${[1, 2, 3, 4, 5, 6, 7, 8, 9, 'clr', 0, 'del'].map(k => `<button type="button" data-k="${k}" ${k === 'clr' || k === 'del' ? 'class="fn"' : ''}>${k === 'del' ? '⌫' : k === 'clr' ? 'Clear' : k}</button>`).join('')}</div>
+        <div class="pin-err" role="alert"></div><button class="btn pin-go" type="submit">Sign in</button></form><p class="xs muted">Ask the administrator for a PIN.</p></div>`;
+      const inp = $('.pin-in', ov); const dots = $('.pin-dots', ov); const err = $('.pin-err', ov);
+      const sync = () => { inp.value = inp.value.replace(/\D/g, '').slice(0, 10); dots.innerHTML = Array.from({ length: Math.max(6, inp.value.length) }, (_, i) => `<i class="${i < inp.value.length ? 'on' : ''}"></i>`).join(''); err.textContent = ''; };
+      inp.oninput = sync; sync(); setTimeout(() => inp.focus(), 30);
+      $('.pin-pad', ov).onclick = (e) => { const k = e.target.closest('[data-k]'); if (!k) return; const v = k.dataset.k; inp.value = v === 'del' ? inp.value.slice(0, -1) : v === 'clr' ? '' : inp.value + v; sync(); inp.focus(); };
+      $('.pin-form', ov).onsubmit = async (e) => {
+        e.preventDefault(); const pin = inp.value; if (pin.length < 6) { err.textContent = 'PINs have 6 to 10 digits.'; return; }
+        const go = $('.pin-go', ov); go.disabled = true; go.innerHTML = '<span class="spin" style="width:12px;height:12px"></span>Checking…';
+        try {
+          if (SNAP && !apiBase) throw new Error('Connect the live API to sign in.');
+          const r = await fetch((apiBase ? apiBase.replace(/\/$/, '') : '') + '/api/auth/member', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin }) });
+          const j = await r.json().catch(() => ({})); if (!j.ok) throw new Error(j.error || `HTTP ${r.status}`);
+          setMember({ token: j.token, name: j.member.name, id: j.member.id, expiresAt: j.expiresAt }); close(); await startRt();
+          toast(document.body.classList.contains('rt-on') ? `Welcome, ${j.member.name}. Prices are live.` : `Welcome, ${j.member.name}. Real-time is off on the server, so prices stay delayed.`);
+          if (state.tv && state.tv.current) loadTv();
+        } catch (x) { err.textContent = x.message; inp.value = ''; sync(); go.disabled = false; go.textContent = 'Sign in'; ov.querySelector('.pin-card').classList.add('shake'); setTimeout(() => { const c = ov.querySelector('.pin-card'); if (c) c.classList.remove('shake'); }, 400); }
+      };
+    }
+    $('.pin-x', ov).onclick = close; ov.onclick = (e) => { if (e.target === ov) close(); };
+    document.body.appendChild(ov); applyTitleCase(ov);
+  }
+  async function checkMember() {
+    if (!auth.m) return;
+    if (!memberTok()) { setMember(null); return; }
+    if (SNAP && !apiBase) return;
+    try { const r = await api('/auth/me', { headers: { authorization: 'Bearer ' + auth.m.token } }); if (r.role !== 'member') { setMember(null); toast(r.revoked ? 'Your member session was ended by the administrator.' : 'Your member session has expired. Sign in again.'); } } catch (e) {}
   }
 
   /* ───────── formatting ───────── */
@@ -435,14 +510,17 @@
       <div class="tv-status"><span class="spin"></span><span class="tv-msg">Connecting to ${esc(ch.name)}…</span></div>
       <div class="tv-ui"><span class="tv-live"><i></i>Live</span><span class="tv-name">${esc(ch.name)}</span><button type="button" class="tv-btn" data-mute aria-label="Toggle sound">${ic(muted ? 'volx' : 'vol')}</button><button type="button" class="tv-btn" data-fs aria-label="Full screen">${ic('expand')}</button></div>`;
     const video = $('video', box); video.muted = muted;
-    const srcs = ch.sources.map(x => (x.relay ? relayBase() + encodeURIComponent(x.url) : x.url));
+    // the relay streams through our server (bandwidth we pay for), so it is offered to members and admin only
+    const lt = liveTok(); const relayed = ch.sources.some(x => x.relay);
+    const srcs = ch.sources.filter(x => !x.relay || lt).map(x => (x.relay ? relayBase() + encodeURIComponent(x.url) + '&a=' + encodeURIComponent(lt) : x.url));
     let i = 0, hls = null, timer = null, dead = false;
     const status = (msg, cls = '') => { const st = $('.tv-status', box); if (!st) return; st.className = 'tv-status ' + cls; st.hidden = !msg; if (msg) $('.tv-msg', st).textContent = msg; const sp = $('.spin', st); if (sp) sp.hidden = cls === 'err'; };
+    if (!srcs.length) { status(`${ch.name} plays through our relay, which is for members. Sign in with your PIN to watch.`, 'err'); box.classList.add('off'); return; }
     const syncMute = () => { const b = $('[data-mute]', box); if (b) b.innerHTML = ic(video.muted ? 'volx' : 'vol'); };
     const fail = () => {
       if (dead) return; clearTimeout(timer); i++;
       if (i < srcs.length) { start(); return; }
-      status(`${ch.name} is not broadcasting right now, or its stream address has changed.`, 'err');
+      status(relayed && !lt ? `${ch.name} did not answer directly. Members can watch it through our relay: sign in with your PIN.` : `${ch.name} is not broadcasting right now, or its stream address has changed.`, 'err');
       box.classList.add('off');
     };
     const tryPlay = () => video.play().catch(() => { if (!video.muted) { video.muted = true; syncMute(); video.play().catch(() => {}); } });
@@ -936,23 +1014,40 @@
   function renderAdmin() {
     const v = $('#view-admin'); const a = state.admin;
     const hdr = () => ({ authorization: 'Bearer ' + a.token, 'content-type': 'application/json' });
-    v.innerHTML = `<div class="grid g-main">
-      ${card({ icon: 'key', title: 'API credentials', sub: 'Stored server-side; values are never shown in full', body: `<div class="form-row"><label for="adm-token">Admin token</label><div class="inline"><input type="password" id="adm-token" value="${esc(a.token)}" placeholder="ADMIN_TOKEN" autocomplete="off"><button class="btn" id="adm-unlock">Unlock</button></div><div class="help">Kept in this browser tab only.</div></div><div id="adm-fields"></div>` })}
-      <div style="display:flex;flex-direction:column;gap:var(--gap);min-width:0">
-        ${card({ icon: 'intel', title: 'AI reading', sub: 'Generate or schedule the market reading shown on the Intelligence page', body: '<div id="adm-ai"><p class="dim">Unlock to manage.</p></div>' })}
-        ${card({ icon: 'book', title: 'Appearance', sub: 'Font and text size for everyone who opens the terminal', body: '<div id="adm-ui"><p class="dim">Unlock to change.</p></div>' })}
-        ${card({ icon: 'news', title: 'News curation', sub: 'Optional: let a model rank and annotate the sidebar headlines', body: '<div id="adm-news"><p class="dim">Unlock to manage.</p></div>' })}
-        ${card({ icon: 'tv', title: 'Live TV channels', sub: 'YouTube channels offered in the sidebar player', body: '<div id="adm-tv"><p class="dim">Unlock to edit.</p></div>' })}
-        ${card({ icon: 'db', title: 'Storage & cache', body: '<div id="adm-status"><p class="dim">Unlock to view.</p></div>' })}
-        ${card({ icon: 'info', title: 'How data is handled', body: '<div class="sm dim" style="display:flex;flex-direction:column;gap:8px"><p><b>No key needed:</b> Yahoo Finance (delayed), FRED, CoinGecko public, gold-api.com.</p><p><b>Optional:</b> FRED, EIA, CoinGecko (longer history), Anthropic (AI explanations), Exa or Parallel (news citations).</p><p><b>Cache:</b> quotes 60 s, histories 15 min, macro 1 h. If a source fails, the last value is served and flagged stale.</p><p><b>Demo mode</b> shows a permanent banner and every badge reads demo.</p></div>' })}
-      </div></div>
-      ${card({ icon: 'pulse', title: 'Real-time data routing', sub: 'Which provider prices each instrument. Switch real-time on and add keys in the Real-time group of the credentials panel', body: '<div id="adm-rt"><p class="dim">Unlock to view.</p></div>' })}
-      ${card({ icon: 'db', title: 'Usage & API logs', sub: 'Every upstream API call, model token and storage operation, with an estimated cost', body: '<div id="adm-usage"><p class="dim">Unlock to view.</p></div>', cls: 'us-card' })}
-      ${card({ icon: 'layers', title: 'Market-size reference data', sub: 'Published aggregates behind the Overview treemap', body: '<div id="adm-sizes"><p class="dim">Unlock to edit.</p></div>', foot: 'Update when a newer SIFMA Fact Book or World Gold Council figure is published, and keep the source and as-of date.' })}`;
+    const SECS = [['home','home','Overview'],['keys','key','API keys'],['members','users','Members'],['realtime','pulse','Real-time'],['ai','intel','AI & news'],['usage','db','Usage & logs'],['tv','tv','Live TV'],['appearance','book','Appearance'],['data','layers','Data & storage']];
+    let sec = (() => { try { return sessionStorage.getItem('cft:admsec') || 'home'; } catch (e) { return 'home'; } })(); if (!SECS.some(x => x[0] === sec)) sec = 'home';
+    v.innerHTML = `<div class="adm-lock" id="adm-lockscreen"><form class="adm-lock-card" id="adm-lock-form" autocomplete="off">
+        <div class="pin-ic">${ic('lock')}</div><h2>Admin console</h2><p class="dim sm">Enter the admin token to manage keys, members, real-time data and usage.</p>
+        <input type="password" id="adm-token" value="${esc(a.token)}" placeholder="ADMIN_TOKEN" autocomplete="off" aria-label="Admin token">
+        <button class="btn" id="adm-unlock" type="submit">Unlock</button><div class="pin-err" id="adm-lock-err" role="alert"></div>
+        <p class="xs muted">The token is kept in this browser tab only. <a href="#overview">Back to the terminal</a></p></form></div>
+      <div class="adm" id="adm-console">
+        <nav class="adm-nav" id="adm-nav" aria-label="Admin sections">${SECS.map(([k, i, l]) => `<button type="button" data-sec="${k}" class="${sec === k ? 'active' : ''}">${ic(i)}<span>${l}</span></button>`).join('')}</nav>
+        <div class="adm-body">
+          <section class="adm-sec" data-sec="home"><div id="adm-home"></div></section>
+          <section class="adm-sec" data-sec="keys">${card({ icon: 'key', title: 'API credentials', sub: 'Stored server-side, encrypted; values are never shown in full', body: '<div id="adm-fields"><div class="loading"><span class="spin"></span>Loading…</div></div>' })}</section>
+          <section class="adm-sec" data-sec="members">${card({ icon: 'users', title: 'Members', sub: 'People who sign in with a PIN for live prices and every TV channel', body: '<div id="adm-members"></div>' })}</section>
+          <section class="adm-sec" data-sec="realtime">${card({ icon: 'pulse', title: 'Real-time data routing', sub: 'Which provider prices each instrument. Switch real-time on and add keys in the Real-time group of the credentials panel', body: '<div id="adm-rt"><p class="dim">Unlock to view.</p></div>' })}</section>
+          <section class="adm-sec" data-sec="ai"><div class="adm-2">${card({ icon: 'intel', title: 'AI reading', sub: 'Generate or schedule the market reading shown on the Intelligence page', body: '<div id="adm-ai"><p class="dim">Unlock to manage.</p></div>' })}${card({ icon: 'news', title: 'News curation', sub: 'Optional: let a model rank and annotate the sidebar headlines', body: '<div id="adm-news"><p class="dim">Unlock to manage.</p></div>' })}</div></section>
+          <section class="adm-sec" data-sec="usage">${card({ icon: 'db', title: 'Usage & API logs', sub: 'Every upstream API call, model token and storage operation, with an estimated cost', body: '<div id="adm-usage"><p class="dim">Unlock to view.</p></div>', cls: 'us-card' })}</section>
+          <section class="adm-sec" data-sec="tv">${card({ icon: 'tv', title: 'Live TV channels', sub: 'Broadcaster HLS streams offered in the sidebar player', body: '<div id="adm-tv"><p class="dim">Unlock to edit.</p></div>' })}</section>
+          <section class="adm-sec" data-sec="appearance">${card({ icon: 'book', title: 'Appearance', sub: 'Font and text size for everyone who opens the terminal', body: '<div id="adm-ui"><p class="dim">Unlock to change.</p></div>' })}</section>
+          <section class="adm-sec" data-sec="data"><div class="adm-2">${card({ icon: 'db', title: 'Storage & cache', body: '<div id="adm-status"><p class="dim">Unlock to view.</p></div>' })}${card({ icon: 'info', title: 'How data is handled', body: '<div class="sm dim" style="display:flex;flex-direction:column;gap:8px"><p><b>No key needed:</b> Yahoo Finance (delayed), FRED, CoinGecko public, gold-api.com.</p><p><b>Optional:</b> FRED, EIA, CoinGecko (longer history), Anthropic (AI explanations), Exa or Parallel (news citations).</p><p><b>Cache:</b> quotes 60 s, histories 15 min, macro 1 h. If a source fails, the last value is served and flagged stale.</p><p><b>Demo mode</b> shows a permanent banner and every badge reads demo.</p></div>' })}</div>${card({ icon: 'layers', title: 'Market-size reference data', sub: 'Published aggregates behind the Overview treemap', body: '<div id="adm-sizes"><p class="dim">Unlock to edit.</p></div>', foot: 'Update when a newer SIFMA Fact Book or World Gold Council figure is published, and keep the source and as-of date.' })}</section>
+        </div></div>`;
+    const lazy = { realtime: () => renderAdminRealtime(hdr), usage: () => renderAdminUsage(hdr), members: () => renderAdminMembers(hdr), home: () => renderAdminHome(hdr) };
+    const opened = new Set();
+    const openSec = (k) => { sec = k; try { sessionStorage.setItem('cft:admsec', k); } catch (e) {} $$('#adm-nav [data-sec]').forEach(b => b.classList.toggle('active', b.dataset.sec === k)); $$('.adm-sec').forEach(x => x.classList.toggle('active', x.dataset.sec === k)); const nb = $(`#adm-nav [data-sec="${k}"]`); if (nb && nb.scrollIntoView) nb.scrollIntoView({ block: 'nearest', inline: 'nearest' }); window.scrollTo({ top: 0 }); if (v.classList.contains('unlocked') && lazy[k] && (!opened.has(k) || k === 'home')) { opened.add(k); lazy[k](); } };
+    state.admin.openSec = openSec;
+    $('#adm-nav').onclick = (e) => { const b = e.target.closest('[data-sec]'); if (b) openSec(b.dataset.sec); };
+    openSec(sec);
     const unlock = async () => {
-      a.token = $('#adm-token').value; try { sessionStorage.setItem('cft:admin', a.token); } catch (e) {}
+      a.token = $('#adm-token').value.trim(); const ub = $('#adm-unlock'); const le = $('#adm-lock-err'); le.textContent = '';
+      if (!a.token) { le.textContent = 'Enter the admin token.'; return; }
+      ub.disabled = true; ub.innerHTML = '<span class="spin" style="width:12px;height:12px"></span>Checking…';
       try {
         const [k, st, sz] = await Promise.all([api('/admin/keys', { headers: hdr() }), api('/admin/status', { headers: hdr() }), api('/admin/sizes', { headers: hdr() })]);
+        try { sessionStorage.setItem('cft:admin', a.token); } catch (e) {}
+        v.classList.add('unlocked'); a.status = st; a.keys = k; syncRole(); startRt();
         const groups = {}; k.fields.filter(f => f.group !== 'Appearance').forEach(f => (groups[f.group] ||= []).push(f));
         const gIcon = { Appearance: 'book', AI: 'intel', Search: 'search', Data: 'db', 'Real-time': 'pulse' };
         $('#adm-fields').innerHTML = Object.entries(groups).map(([g, fs]) => `<div class="nav-label" style="padding:18px 0 4px;display:flex;align-items:center;gap:6px">${ic(gIcon[g] || 'key')}${esc(g)}</div>` + fs.map(f => {
@@ -982,14 +1077,16 @@
           $('#adm-ai-run').onclick = async (e) => { const b = e.currentTarget; b.disabled = true; const old = b.innerHTML; b.innerHTML = `<span class="spin" style="width:12px;height:12px"></span>Refreshing…`; try { const r = await api('/admin/ai-refresh', { method: 'POST', headers: hdr(), body: JSON.stringify({ model: $('#adm-ai-model').value || undefined, question: $('#adm-ai-q').value || undefined }) }); toast(`Reading refreshed with ${r.reading.model}`); unlock(); } catch (err) { toast(err.message); b.disabled = false; b.innerHTML = old; } };
           $$('#adm-ai [data-go]').forEach(x => x.onclick = () => show(x.dataset.go));
         } catch (e) { $('#adm-ai').innerHTML = errorBox(e.message); }
-        renderAdminUI(hdr); renderAdminNews(hdr); renderAdminTv(hdr); renderAdminStore(hdr); renderAdminRealtime(hdr); renderAdminUsage(hdr);
+        renderAdminUI(hdr); renderAdminNews(hdr); renderAdminTv(hdr); renderAdminStore(hdr); opened.clear(); openSec(sec);
         $('#adm-status').innerHTML = `<div class="tbl"><table class="t"><thead><tr><th>Source</th><th class="num">OK</th><th class="num">Failed</th><th class="num">Stale</th></tr></thead><tbody>${Object.entries(st.bySource).map(([s, x]) => `<tr><td><span style="display:inline-flex;gap:8px;align-items:center"><i class="dot ${x.failed ? 'bad' : 'ok'}"></i>${esc(s)}</span>${x.errors.length ? `<div class="xs muted">${x.errors.map(esc).join('<br>')}</div>` : ''}</td><td class="num up">${x.ok}</td><td class="num ${x.failed ? 'down' : 'muted'}">${x.failed}</td><td class="num ${x.stale ? 'down' : 'muted'}">${x.stale}</td></tr>`).join('')}</tbody></table></div><div id="adm-store" style="margin:10px 0"></div><button class="btn ghost" id="adm-clear">${ic('refresh')}Clear cache</button>`;
         $('#adm-clear').onclick = async () => { try { const r = await api('/admin/cache/clear', { method: 'POST', headers: hdr() }); toast(`Cleared ${r.cleared} cache entries`); } catch (e) { toast(e.message); } };
         $('#adm-sizes').innerHTML = sz.references.filter(r => r.id !== 'CRYPTO_TOTAL').map(r => `<div class="form-row"><label>${esc(r.label)} <span class="xs muted">${esc(r.measure.replace(/_/g, ' '))}</span></label><div class="inline"><input type="number" data-sz="${r.id}" data-f="${r.tonnes ? 'tonnes' : 'usd'}" placeholder="${r.tonnes ? r.tonnes + ' tonnes' : (r.usd / 1e12).toFixed(1) + ' $T'}" value="${r.override ? (r.override.tonnes || r.override.usd / 1e12) : ''}" aria-label="${esc(r.label)} value"><input type="text" data-szs="${r.id}" placeholder="${esc(r.source)}" value="${esc(r.override?.source || '')}" aria-label="Source"><input type="text" data-sza="${r.id}" placeholder="${esc(r.asOf)}" value="${esc(r.override?.asOf || '')}" aria-label="As of" style="flex:0 1 90px"></div></div>`).join('') + `<div class="row-actions" style="margin-top:12px"><button class="btn" id="adm-size-save">Save reference data</button></div>`;
         $('#adm-size-save').onclick = async () => { const o = {}; $$('#adm-sizes input[data-sz]').forEach(i => { if (!i.value) return; const id = i.dataset.sz; o[id] = i.dataset.f === 'tonnes' ? { tonnes: Number(i.value) } : { usd: Number(i.value) * 1e12 }; o[id].source = $(`[data-szs="${id}"]`).value || undefined; o[id].asOf = $(`[data-sza="${id}"]`).value || undefined; }); try { await api('/admin/sizes', { method: 'POST', headers: hdr(), body: JSON.stringify(o) }); toast('Reference data saved'); } catch (e) { toast(e.message); } };
-      } catch (e) { $('#adm-fields').innerHTML = errorBox(e.message); }
+      } catch (e) { v.classList.remove('unlocked'); le.textContent = /token|unauth|401/i.test(e.message) ? 'That token was not accepted.' : e.message; if (/token|unauth|401/i.test(e.message)) { a.token = ''; try { sessionStorage.removeItem('cft:admin'); } catch (x) {} syncRole(); } }
+      finally { ub.disabled = false; ub.textContent = 'Unlock'; }
     };
-    $('#adm-unlock').onclick = unlock; $('#adm-token').onkeydown = e => { if (e.key === 'Enter') unlock(); };
+    $('#adm-lock-form').onsubmit = (e) => { e.preventDefault(); unlock(); };
+    if (!a.token) setTimeout(() => { const t = $('#adm-token'); if (t) t.focus(); }, 50);
     if (a.token) unlock();
   }
 
@@ -1100,7 +1197,7 @@
   }
   async function pollRt() {
     if (document.hidden) return;
-    try { const r = await api('/rt/quotes'); if (!r.enabled) return stopRt(); r.quotes.forEach(q => applyRt(q.id, q.price, { prevClose: q.prevClose, ts: q.ts, source: q.computed ? 'ICE formula · ' + (q.legs || 'live FX') : q.source, delayed: q.delayed })); } catch (e) { /* keep last values; next tick retries */ }
+    try { const r = await api('/rt/quotes', { headers: liveHeaders() }); if (!r.enabled) return stopRt(); r.quotes.forEach(q => applyRt(q.id, q.price, { prevClose: q.prevClose, ts: q.ts, source: q.computed ? 'ICE formula · ' + (q.legs || 'live FX') : q.source, delayed: q.delayed })); } catch (e) { if (/members|sign in/i.test(e.message)) { stopRt(); checkMember(); return; } /* keep last values; next tick retries */ }
   }
   function openStream(cfg) {
     const ids = Object.entries(cfg.products || {}); if (!ids.length || typeof WebSocket === 'undefined') return;
@@ -1112,7 +1209,7 @@
     ws.onclose = () => { if (rt.ws !== ws) return; rt.ws = null; const d = Math.min(60000, 2000 * 2 ** rt.wsRetry++); setTimeout(() => { if (rt.cfg && rt.cfg.enabled && !rt.ws) openStream(cfg); }, d); };
     ws.onerror = () => { try { ws.close(); } catch (e) {} };
   }
-  function stopRt() { clearInterval(rt.timer); rt.timer = null; if (rt.ws) { const w = rt.ws; rt.ws = null; try { w.close(); } catch (e) {} } rt.gen++; for (const w of Object.values(rt.sockets)) { try { w.close(); } catch (e) {} } rt.sockets = {}; rt.sock = {}; rt.vals = {}; document.body.classList.remove('rt-on'); }
+  function stopRt() { clearInterval(rt.timer); rt.timer = null; if (rt.ws) { const w = rt.ws; rt.ws = null; try { w.close(); } catch (e) {} } rt.gen++; for (const w of Object.values(rt.sockets)) { try { w.close(); } catch (e) {} } rt.sockets = {}; rt.sock = {}; rt.vals = {}; document.body.classList.remove('rt-on'); syncTickerTag(); }
   /* Provider WebSockets (admin-enabled). Each speaks its own protocol; ticks go through applyRt like polled quotes. */
   function openProviderSocket(d, gen, retry = 0) {
     if (gen !== rt.gen || typeof WebSocket === 'undefined') return;
@@ -1161,14 +1258,82 @@
   }
   async function startRt() {
     if (SNAP && !apiBase) return; // the embedded snapshot never streams
-    try { rt.cfg = await api('/rt/config'); } catch (e) { return; }
-    stopRt(); if (!rt.cfg.enabled) return;
-    document.body.classList.add('rt-on');
+    try { rt.cfg = await api('/rt/config', { headers: liveHeaders() }); } catch (e) { return; }
+    stopRt(); if (!rt.cfg.enabled) { syncTickerTag(); return; }
+    document.body.classList.add('rt-on'); syncTickerTag();
     if (rt.cfg.polled.length) { pollRt(); rt.timer = setInterval(pollRt, rt.cfg.intervalSec * 1000); }
     if (rt.cfg.stream) openStream(rt.cfg.stream);
     openProviderSockets();
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden && rt.timer) pollRt(); });
+
+  /* ───────── Admin: overview ───────── */
+  async function renderAdminHome(hdr) {
+    const box = $('#adm-home'); if (!box) return; const a = state.admin;
+    const k = a.keys || { fields: [] }; const st = a.status || {};
+    const grp = (g) => k.fields.filter(f => f.group === g && f.secret !== false); const set = (g) => grp(g).filter(f => f.configured).length;
+    const val = (key) => { const f = k.fields.find(x => x.key === key); return f ? (f.value || f.placeholder || '') : ''; };
+    let mem = null; try { mem = await api('/admin/members', { headers: hdr() }); } catch (e) { mem = null; }
+    const act = mem ? mem.members.filter(m => m.active).length : null;
+    const rtOn = val('REALTIME_MODE') === 'on';
+    const tile = (secKey, icon, label, value, note, tone = '') => `<button type="button" class="adm-tile" data-go-sec="${secKey}"><span class="adm-tile-ic">${ic(icon)}</span><span class="adm-tile-l">${esc(label)}</span><b class="${tone}">${value}</b><small>${note}</small></button>`;
+    const store = st.store || {};
+    box.innerHTML = `<div class="adm-hero"><div><h2>Admin console</h2><p class="dim sm">Everything that costs money or changes what visitors see lives here. Choose a section ${matchMedia('(max-width: 900px)').matches ? 'from the tabs above' : 'on the left'}.</p></div></div>
+      <div class="adm-tiles">
+        ${tile('members', 'users', 'Members', act == null ? '—' : `${act} active`, mem ? `${mem.members.length} total · sign in with a PIN` : 'Could not read members')}
+        ${tile('realtime', 'pulse', 'Real-time for members', rtOn ? 'On' : 'Off', rtOn ? `every ${esc(val('REALTIME_INTERVAL') || '10')} s · visitors stay delayed` : 'everyone sees delayed prices', rtOn ? 'up' : 'muted')}
+        ${tile('keys', 'key', 'Market data keys', `${set('Real-time') + set('Data')} set`, `${set('AI')} AI · ${set('Search')} search keys`)}
+        ${tile('usage', 'db', 'Usage & cost', 'Open', 'API calls, model tokens, estimated $')}
+        ${tile('ai', 'intel', 'AI reading', esc(val('AI_AUTO_REFRESH') || 'off'), `news curation: ${esc(val('NEWS_AI_CURATION') || 'off')}`)}
+        ${tile('data', 'layers', 'Storage', esc(store.backend || st.backend || '—'), store.persistent === false ? '<span class="down">not persistent</span>' : 'persistent')}
+      </div>
+      <div class="adm-roles"><div class="field"><label>Who sees what</label></div><div class="tbl"><table class="t"><thead><tr><th></th><th>Visitor</th><th>Member</th><th>Admin</th></tr></thead><tbody>
+        <tr><td>How they get in</td><td>Open the site</td><td>PIN (Sign in, top right)</td><td>Admin token at #admin</td></tr>
+        <tr><td>Prices and ticker</td><td>Delayed (free public sources)</td><td>Live when real-time is on</td><td>Live when real-time is on</td></tr>
+        <tr><td>Paid provider calls</td><td>Never</td><td>Shared, at the real-time interval</td><td>Same, plus admin-only streams</td></tr>
+        <tr><td>Live TV</td><td>Direct streams</td><td>All channels, including relayed ones</td><td>All channels</td></tr>
+        <tr><td>AI reading</td><td>Reads the stored reading</td><td>Reads the stored reading</td><td>Refreshes it</td></tr>
+      </tbody></table></div></div>`;
+    $$('#adm-home [data-go-sec]').forEach(b => b.onclick = () => state.admin.openSec(b.dataset.goSec));
+  }
+
+  /* ───────── Admin: members (PIN sign-in) ───────── */
+  async function renderAdminMembers(hdr) {
+    const box = $('#adm-members'); if (!box) return;
+    box.innerHTML = `<div class="loading"><span class="spin"></span>Loading members…</div>`;
+    let r; try { r = await api('/admin/members', { headers: hdr() }); } catch (e) { box.innerHTML = errorBox(e.message); return; }
+    const call = async (body, okMsg) => { try { const x = await api('/admin/members', { method: 'POST', headers: hdr(), body: JSON.stringify(body) }); toast(okMsg); r.members = x.members; draw(); return true; } catch (e) { toast(e.message); return false; } };
+    const gen = () => { const a = new Uint32Array(1); crypto.getRandomValues(a); return String(a[0] % 1e6).padStart(6, '0'); };
+    let editing = null, confirmDel = null;
+    const draw = () => {
+      const M = r.members;
+      box.innerHTML = `<div class="mem">
+        ${r.liveOn ? '' : `<div class="callout warn">${ic('info')}<div>Real-time is off, so members also see delayed prices for now. Members still get every TV channel. <button type="button" class="linkish" data-go-sec="realtime">Real-time settings</button></div></div>`}
+        <form class="mem-add" id="mem-add" autocomplete="off"><div class="field"><label for="mem-name">Name</label><input id="mem-name" type="text" maxlength="40" placeholder="e.g. Rina"></div>
+          <div class="field"><label for="mem-pin">PIN (6–10 digits)</label><div class="inline"><input id="mem-pin" type="text" inputmode="numeric" maxlength="10" placeholder="123456" autocomplete="off"><button type="button" class="btn ghost" id="mem-gen">Generate</button></div></div>
+          <button class="btn" type="submit">${ic('users')}Add member</button></form>
+        <p class="xs muted">Share the PIN with the member privately. It is stored only as a salted, keyed hash and cannot be shown again; set a new one if it is lost. Each PIN must be unique. Five wrong PINs from one address pause sign-in for 15 minutes.</p>
+        <div class="tbl"><table class="t mem-t"><thead><tr><th>Member</th><th>Status</th><th>Last sign-in</th><th class="num">Sign-ins</th><th class="num">Actions</th></tr></thead><tbody>
+          ${M.length ? M.map(m => `<tr data-id="${esc(m.id)}"><td><span class="mb-av sm">${esc(m.name.charAt(0).toUpperCase())}</span><b>${esc(m.name)}</b><div class="xs muted">added ${esc(fmt.date(m.createdAt))}</div></td>
+            <td><span class="badge ${m.active ? 'measured' : ''}">${m.active ? 'active' : 'disabled'}</span></td><td class="xs">${m.lastLogin ? `${esc(fmt.time(m.lastLogin))}<div class="muted">${esc(fmt.ago(m.lastLogin))}</div>` : '<span class="muted">never</span>'}</td><td class="num mono">${m.logins}</td>
+            <td class="num"><div class="mem-acts">${editing === m.id ? `<input type="text" inputmode="numeric" maxlength="10" class="mem-newpin" placeholder="New PIN" value="${gen()}"><button type="button" class="btn sm" data-act="pin">Save PIN</button><button type="button" class="btn ghost sm" data-act="cancel">Cancel</button>` : confirmDel === m.id ? `<span class="xs down">Remove ${esc(m.name)}?</span><button type="button" class="btn sm danger" data-act="delete">Remove</button><button type="button" class="btn ghost sm" data-act="cancel">Keep</button>` : `<button type="button" class="btn ghost sm" data-act="edit">New PIN</button><button type="button" class="btn ghost sm" data-act="toggle">${m.active ? 'Disable' : 'Enable'}</button><button type="button" class="btn ghost sm" data-act="revoke" title="End all of this member's sessions">Sign out everywhere</button><button type="button" class="icon-btn sm" data-act="ask" aria-label="Remove ${esc(m.name)}">${ic('x')}</button>`}</div></td></tr>`).join('') : `<tr><td colspan="5" class="dim">No members yet. Add the first one above.</td></tr>`}
+        </tbody></table></div></div>`;
+      $('#mem-gen').onclick = () => { $('#mem-pin').value = gen(); };
+      $('#mem-add').onsubmit = async (e) => { e.preventDefault(); const name = $('#mem-name').value.trim(), pin = $('#mem-pin').value.trim(); if (!name) return toast('Enter a name'); if (!/^\d{6,10}$/.test(pin)) return toast('PIN must be 6 to 10 digits'); if (await call({ action: 'add', name, pin }, `${name} added. Share the PIN ${pin} privately.`)) { /* drawn */ } };
+      $$('#adm-members [data-go-sec]').forEach(b => b.onclick = () => state.admin.openSec(b.dataset.goSec));
+      $$('#adm-members .mem-t tr[data-id]').forEach(tr => tr.onclick = async (e) => {
+        const b = e.target.closest('[data-act]'); if (!b) return; const id = tr.dataset.id; const m = r.members.find(x => x.id === id); const act = b.dataset.act;
+        if (act === 'edit') { editing = id; confirmDel = null; draw(); const i = $(`#adm-members tr[data-id="${id}"] .mem-newpin`); if (i) { i.focus(); i.select(); } return; }
+        if (act === 'ask') { confirmDel = id; editing = null; draw(); return; }
+        if (act === 'cancel') { editing = confirmDel = null; draw(); return; }
+        if (act === 'pin') { const pin = $('.mem-newpin', tr).value.trim(); if (!/^\d{6,10}$/.test(pin)) return toast('PIN must be 6 to 10 digits'); editing = null; await call({ action: 'update', id, pin }, `New PIN for ${m.name}: ${pin}. Their old sessions have ended.`); return; }
+        if (act === 'toggle') { await call({ action: 'update', id, active: !m.active }, m.active ? `${m.name} disabled and signed out` : `${m.name} enabled`); return; }
+        if (act === 'revoke') { await call({ action: 'revoke', id }, `${m.name} signed out on every device`); return; }
+        if (act === 'delete') { confirmDel = null; await call({ action: 'delete', id }, `${m.name} removed`); }
+      });
+    };
+    draw();
+  }
 
   /* ───────── Admin: usage meter, token use and API logs ───────── */
   const us = { days: 7, svc: 'all', errs: false, q: '', limit: 60, metric: 'cost' };
@@ -1293,7 +1458,7 @@ ${x.ops.sort((a, b) => b.cost - a.cost || b.n - a.n).map(o => `<tr class="us-op-
     };
     const RT_OPTS = (c, p) => c.options.includes(p);
     draw();
-    const wsBox = () => { const el = $('#rt-ws-status'); if (!el) return false; const e = Object.entries(rt.sock); el.innerHTML = e.length ? `<div class="field"><label>WebSocket streams in this browser</label></div><div class="rt-ws">${e.map(([p, x]) => `<span class="rt-w ${x.status}"><i></i><b>${esc(pname(p))}</b> ${esc(x.status)} · ${x.n} symbols · ${x.ticks} ticks${x.at ? ` · last ${fmt.ago(new Date(x.at).toISOString())}` : ''}${x.note ? ` · <span class="down">${esc(x.note.slice(0, 160))}</span>` : ''} <span class="xs muted">(${x.mode === 'everyone' ? 'all visitors' : 'admin only'})</span></span>`).join('')}</div>` : `<p class="xs muted">WebSocket streams: none running. Turn one on in the Real-time group of the credentials panel (Massive, Alpaca, Finnhub or Twelve Data WebSocket), then save.</p>`; return true; };
+    const wsBox = () => { const el = $('#rt-ws-status'); if (!el) return false; const e = Object.entries(rt.sock); el.innerHTML = e.length ? `<div class="field"><label>WebSocket streams in this browser</label></div><div class="rt-ws">${e.map(([p, x]) => `<span class="rt-w ${x.status}"><i></i><b>${esc(pname(p))}</b> ${esc(x.status)} · ${x.n} symbols · ${x.ticks} ticks${x.at ? ` · last ${fmt.ago(new Date(x.at).toISOString())}` : ''}${x.note ? ` · <span class="down">${esc(x.note.slice(0, 160))}</span>` : ''} <span class="xs muted">(${x.mode === 'members' || x.mode === 'everyone' ? 'all members' : 'admin only'})</span></span>`).join('')}</div>` : `<p class="xs muted">WebSocket streams: none running. Turn one on in the Real-time group of the credentials panel (Massive, Alpaca, Finnhub or Twelve Data WebSocket), then save.</p>`; return true; };
     wsBox(); clearInterval(renderAdminRealtime._t); renderAdminRealtime._t = setInterval(() => { if (!wsBox()) clearInterval(renderAdminRealtime._t); }, 2000);
   }
 
@@ -1415,6 +1580,7 @@ ${x.ops.sort((a, b) => b.cost - a.cost || b.n - a.n).map(o => `<tr class="us-op-
   async function show(view) {
     if (!(view in renderers)) view = 'overview';
     state.view = view; const meta = VIEWS[view];
+    document.body.classList.toggle('admin-mode', view === 'admin'); if (view === 'admin') { const sd = $('#side'); if (sd) sd.classList.remove('open'); }
     $$('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
     $$('.view').forEach(s => s.classList.toggle('active', s.id === 'view-' + view));
     $('#page-title').textContent = meta.title; $('#page-sub').textContent = meta.sub; document.title = `${meta.label} · Capital Flow Terminal`;
@@ -1437,6 +1603,10 @@ ${x.ops.sort((a, b) => b.cost - a.cost || b.n - a.n).map(o => `<tr class="us-op-
   // theme attribute from storage may be JSON-encoded by store.set; normalise once
   try { const raw = localStorage.getItem('cft:theme'); if (raw && raw.startsWith('"')) { const t = JSON.parse(raw); localStorage.setItem('cft:theme', t); document.documentElement.dataset.theme = t; } } catch (e) {}
   buildNav(); paintIcons(); syncThemeIcon();
+  $('#member-btn').onclick = () => { if (state.admin.token && !memberTok()) { show('admin'); return; } openAccount(); };
+  $('#ticker-tag').onclick = () => { if (!isLive()) openAccount(); else if (memberTok()) openAccount(); };
+  $('#admin-lock').onclick = () => { state.admin.token = ''; try { sessionStorage.removeItem('cft:admin'); } catch (e) {} syncRole(); startRt(); toast('Admin locked'); if (state.view === 'admin') renderAdmin(); };
+  syncRole(); checkMember();
   loadUI(false);
   (async () => {
     try { await loadCore(); } catch (e) { $('#ticker-inner').innerHTML = `<span class="down">Quotes unavailable: ${esc(e.message)}</span>`; $('#view-overview').innerHTML = errorBox(`The API could not be reached (${e.message}). Check that the server is running and can reach the data sources.`); return; }

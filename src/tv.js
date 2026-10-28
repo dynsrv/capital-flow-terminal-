@@ -80,7 +80,7 @@ async function hmac(secret, text) {
   const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(text));
   return [...new Uint8Array(sig)].slice(0, 12).map(b => b.toString(16).padStart(2, '0')).join('');
 }
-const relayUrl = async (secret, abs, ref) => `/api/hls?u=${encodeURIComponent(abs)}${ref ? `&r=${encodeURIComponent(ref)}` : ''}&s=${await hmac(secret, abs + '|' + (ref || ''))}`;
+const relayUrl = async (secret, abs, ref, auth) => `/api/hls?u=${encodeURIComponent(abs)}${ref ? `&r=${encodeURIComponent(ref)}` : ''}&s=${await hmac(secret, abs + '|' + (ref || ''))}${auth ? `&a=${encodeURIComponent(auth)}` : ''}`;
 
 export async function hlsRelay(ctx, request, url) {
   if ((request.headers.get('sec-fetch-site') || '') === 'cross-site') return new Response('The relay serves this dashboard only', { status: 403 });
@@ -112,10 +112,10 @@ export async function hlsRelay(ctx, request, url) {
       if (!t) { out.push(line); continue; }
       if (t.startsWith('#')) {
         const m = [...t.matchAll(/URI="([^"]+)"/g)]; if (!m.length) { out.push(line); continue; }
-        let nl = line; for (const mm of m) nl = nl.replace(mm[0], `URI="${await relayUrl(secret, new URL(mm[1], finalUrl).href, ref)}"`);
+        let nl = line; for (const mm of m) nl = nl.replace(mm[0], `URI="${await relayUrl(secret, new URL(mm[1], finalUrl).href, ref, url.searchParams.get('a'))}"`);
         out.push(nl); continue;
       }
-      out.push(await relayUrl(secret, new URL(t, finalUrl).href, ref));
+      out.push(await relayUrl(secret, new URL(t, finalUrl).href, ref, url.searchParams.get('a')));
     }
     return new Response(out.join('\n'), { headers: { ...CORS, 'content-type': 'application/vnd.apple.mpegurl', 'cache-control': 'public, s-maxage=2, max-age=1' } });
   }

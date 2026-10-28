@@ -67,6 +67,28 @@ Vercel Edge cannot hold sockets open, so streams run in the browser, which means
 `/api/rt/config`. Admin → Real-time shows each stream's status, symbol count, ticks and last tick. Polling keeps running
 underneath, so a stream that drops never leaves a price stale.
 
+## Roles: visitor, member, admin
+
+| | Visitor | Member | Admin |
+|---|---|---|---|
+| Sign-in | none | PIN (6–10 digits), *Sign in* top right | `ADMIN_TOKEN` at `#admin` |
+| Prices and ticker | delayed (free public sources) | live when real-time is on | live when real-time is on |
+| Paid provider calls | never: `/api/rt/config` returns real-time off and `/api/rt/quotes` answers 401 | shared, at the real-time interval | same, plus admin-only WebSocket streams |
+| Live TV | direct streams | all channels, including the `/api/hls` relay | all channels |
+
+- Members are managed in Admin → Members (add, new PIN, disable, sign out everywhere, remove). PINs are stored only as
+  HMAC(server secret, salt + PIN) inside the encrypted store document `auth/members`; each PIN must be unique.
+- A sign-in returns a signed 30-day session token (`m1.<id>.<gen>.<exp>.<sig>`); new PIN, disable or *Sign out everywhere*
+  bumps `gen` and ends existing sessions. Five wrong PINs from one address pause sign-in for 15 minutes (per instance).
+- WebSocket mode `members` (formerly `everyone`) hands the Finnhub / Twelve Data key to signed-in members only.
+- `/api/rt/*` responses are `private, no-store`, so a CDN never serves live prices to a visitor.
+
+## Admin console
+
+`#admin` is a dedicated console: the ticker, news and TV sidebar, page navigation and footer are hidden, and the header
+shows *Back to terminal* and *Lock*. Sections: Overview, API keys, Members, Real-time, AI & news, Usage & logs, Live TV,
+Appearance, Data & storage. Real-time (which probes providers) and Usage (which lists storage) load only when opened.
+
 ## Usage & API logs (Admin)
 
 Every upstream call goes through one fetch helper, which records the service, operation (path only: keys, tickers and

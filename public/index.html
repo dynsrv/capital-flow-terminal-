@@ -34,6 +34,9 @@ try { var u = JSON.parse(localStorage.getItem('cft:ui') || 'null'); if (u) { var
       <button id="side-btn" class="icon-btn" title="News & TV" aria-label="Open news and TV panel" data-icon="news"></button>
       <button id="connect-btn" class="icon-btn" title="Connect to a deployed API" aria-label="Connect to a deployed API" data-icon="link"></button>
       <button id="refresh-btn" class="icon-btn" title="Refresh data" aria-label="Refresh data" data-icon="refresh"></button>
+      <button id="member-btn" class="member-btn" type="button" aria-label="Member sign-in"></button>
+      <a id="admin-exit" class="btn ghost admin-exit" href="#overview"><span data-icon="back"></span><span>Back to terminal</span></a>
+      <button id="admin-lock" class="icon-btn admin-lock" title="Lock admin" aria-label="Lock admin" data-icon="lock"></button>
       <button id="theme-btn" class="icon-btn" title="Switch light / dark" aria-label="Switch light or dark theme" data-icon="moon"></button>
     </div>
   </div>
@@ -45,7 +48,7 @@ try { var u = JSON.parse(localStorage.getItem('cft:ui') || 'null'); if (u) { var
   <button class="btn" id="connect-save">Connect</button>
   <span class="xs muted">Leave empty to use this page's own API, or the embedded snapshot.</span>
 </div>
-<div class="ticker" id="ticker"><div class="ticker-inner" id="ticker-inner"><span class="muted">Loading quotes…</span></div></div>
+<div class="ticker" id="ticker"><button type="button" class="ticker-tag visitor" id="ticker-tag">Delayed</button><div class="ticker-track"><div class="ticker-inner" id="ticker-inner"><span class="muted">Loading quotes…</span></div></div></div>
 
 <div class="shell">
   <aside class="sidebar" id="side" aria-label="News and TV">

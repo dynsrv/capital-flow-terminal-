@@ -126,7 +126,7 @@ export async function publicConfig(ctx) {
     stream: s.enabled && s.crypto === 'coinbase' ? { provider: 'coinbase', url: 'wss://ws-feed.exchange.coinbase.com', products: Object.fromEntries(Object.entries(cov).filter(([, v]) => v.provider === 'coinbase').map(([id, v]) => [id, v.symbol])) } : null,
     polled: s.enabled ? Object.entries(cov).filter(([, v]) => v.path === 'poll').map(([id, v]) => ({ id, provider: v.provider })) : [],
     providers: Object.fromEntries(Object.entries(PROVIDERS).map(([k, v]) => [k, { name: v.name, configured: k === 'coinbase' ? s.crypto === 'coinbase' : !!s.configured[k] }])),
-    sockets: s.enabled ? await socketsFor(ctx, 'everyone') : [],
+    sockets: s.enabled ? await socketsFor(ctx, 'members') : [],
   };
 }
 
@@ -298,23 +298,23 @@ export const RT_TESTS = {
 /* ───────── WebSocket options ─────────
    Every provider below authenticates its stream with the API key, and an edge function cannot hold a stream open
    for visitors, so a socket runs in the browser. 'admin' hands the key only to an unlocked Admin browser;
-   'everyone' puts it in the public config (offered only for providers without a one-connection limit). */
+   'members' hands it to every signed-in member (offered only for providers without a one-connection limit). */
 const WS_DEF = {
   massive: { key: 'WS_MASSIVE', modes: ['off', 'admin'], url: () => 'wss://socket.massive.com/stocks', stocksOnly: true },
   alpaca: { key: 'WS_ALPACA', modes: ['off', 'admin'], url: () => 'wss://stream.data.alpaca.markets/v2/iex', stocksOnly: true },
-  finnhub: { key: 'WS_FINNHUB', modes: ['off', 'admin', 'everyone'], url: (k) => `wss://ws.finnhub.io?token=${encodeURIComponent(k.FINNHUB_API_KEY)}` },
-  twelvedata: { key: 'WS_TWELVEDATA', modes: ['off', 'admin', 'everyone'], url: (k) => `wss://ws.twelvedata.com/v1/quotes/price?apikey=${encodeURIComponent(k.TWELVEDATA_API_KEY)}` },
+  finnhub: { key: 'WS_FINNHUB', modes: ['off', 'admin', 'members'], url: (k) => `wss://ws.finnhub.io?token=${encodeURIComponent(k.FINNHUB_API_KEY)}` },
+  twelvedata: { key: 'WS_TWELVEDATA', modes: ['off', 'admin', 'members'], url: (k) => `wss://ws.twelvedata.com/v1/quotes/price?apikey=${encodeURIComponent(k.TWELVEDATA_API_KEY)}` },
 };
-/** Socket descriptors for the given audience ('everyone' or 'admin'). Each lists id → provider symbol for the
+/** Socket descriptors for the given audience ('members' or 'admin'). Each lists id → provider symbol for the
  *  instruments currently routed to that provider (or whose chain includes it). */
 export async function socketsFor(ctx, audience) {
   const s = rtSettings(ctx.config); if (!s.enabled) return [];
   const routing = await loadRouting(ctx); const cov = routeFor(s, routing, await knownGaps(ctx), routing.scan);
   const k = ctx.config.keys; const out = [];
   for (const [p, d] of Object.entries(WS_DEF)) {
-    const mode = d.modes.includes(k[d.key]) ? k[d.key] : 'off';
+    const raw = k[d.key] === 'everyone' ? 'members' : k[d.key]; const mode = d.modes.includes(raw) ? raw : 'off';
     if (mode === 'off' || !s.configured[p]) continue;
-    if (audience === 'everyone' && mode !== 'everyone') continue;
+    if (audience === 'members' && mode !== 'members') continue;
     const symbols = {};
     for (const [id, v] of Object.entries(cov)) {
       if (v.path !== 'poll' || !(v.chain || []).includes(p)) continue;

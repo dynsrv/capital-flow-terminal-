@@ -16,6 +16,7 @@ import { getReading, refreshReading, scheduledRefresh, listModels, listReadings 
 import { fetchNews, curateNews, getCurated, SOURCES as NEWS_SOURCES } from './news.js';
 import { getChannels, saveChannels, resetChannels, hlsRelay, DEFAULT_CHANNELS } from './tv.js';
 import * as U from './lib/usage.js';
+import { roleOf, canLive, signIn, listMembers, manageMembers } from './lib/auth.js';
 import { publicConfig, rtQuotes, rtSettings, PROVIDERS, RT_MAP, loadRouting, saveRouting, routeFor, scanPlans, socketsFor } from './realtime.js';
 
 // CORS so the published artifact (or any front-end) can call this API.
@@ -25,7 +26,7 @@ function ctxFor(env, config) { return { env, config, cache: createCache(env) }; 
 function withStore(env) { if (!env.__store) { try { env.__store = createStore(env); } catch (e) { env.__store = null; } } return env; }
 
 // CDN cache policy for public GET routes (seconds). Admin, cron and POST routes are never cached.
-const CDN_TTL = [[/^\/ui$/, 60], [/^\/rt\/config/, 30], [/^\/quotes/, 30], [/^\/performance|^\/overview|^\/analytics\/regime|^\/news|^\/tv/, 120], [/^\/history/, 600], [/^\/analytics|^\/shock|^\/flows/, 300], [/^\/risk|^\/intel/, 300], [/^\/universe|^\/health/, 60]];
+const CDN_TTL = [[/^\/ui$/, 60], [/^\/quotes/, 30], [/^\/performance|^\/overview|^\/analytics\/regime|^\/news|^\/tv/, 120], [/^\/history/, 600], [/^\/analytics|^\/shock|^\/flows/, 300], [/^\/risk|^\/intel/, 300], [/^\/universe|^\/health/, 60]];
 function cdnHeaders(p, method) { if (method !== 'GET' || p.startsWith('/admin') || p.startsWith('/cron')) return {}; const hit = CDN_TTL.find(([re]) => re.test(p)); return hit ? { 'cache-control': `public, s-maxage=${hit[1]}, stale-while-revalidate=${hit[1] * 4}` } : {}; }
 
 /** Daily state snapshot: what the dashboard itself read today (quotes, regime, stress, anomalies, signals). */
@@ -94,10 +95,14 @@ async function handleApi(request, env, url) {
     if (p === '/intel/reading') return wrap(await getReading(ctx));
     if (p === '/news') { const [feed, curated] = await Promise.all([fetchNews(ctx), getCurated(ctx)]); return wrap({ ...feed, curated, aiCuration: (config.keys.NEWS_AI_CURATION || 'off') !== 'off' }); }
     if (p === '/tv/channels' || p === '/tv/streams') return wrap(await getChannels(ctx));
-    if (p === '/hls') return hlsRelay(ctx, request, url);
+    // Live TV relay streams through our function (bandwidth we pay for): members and admin only. Direct streams need no relay.
+    if (p === '/hls') { const who = await roleOf(request, env, url); if (!canLive(who)) return new Response('Live TV relay is for members. Sign in with your PIN.', { status: 403, headers: CORS }); return hlsRelay(ctx, request, url); }
+    if (p === '/auth/member' && request.method === 'POST') { const body = await request.json().catch(() => ({})); try { return json({ ok: true, ...(await signIn(env, request, body.pin)) }); } catch (e) { return error(e.message, e.status || 400); } }
+    if (p === '/auth/me') { const who = await roleOf(request, env, url); return json({ ok: true, role: who.role, member: who.member || null, expired: !!who.expired, revoked: !!who.revoked }); }
     if (p === '/ui') { const font = ['terminal', 'classic', 'modern'].includes(config.keys.UI_FONT) ? config.keys.UI_FONT : 'terminal'; const size = ['small', 'default', 'large', 'x-large'].includes(config.keys.UI_FONT_SIZE) ? config.keys.UI_FONT_SIZE : 'default'; return wrap({ font, size, scale: { small: 0.92, default: 1, large: 1.08, 'x-large': 1.16 }[size] }); }
-    if (p === '/rt/config') return wrap(await publicConfig(ctx));
-    if (p === '/rt/quotes') { const r = await rtQuotes(ctx); return json({ ok: true, generatedAt: new Date().toISOString(), ms: Date.now() - started, ...r }, 200, r.enabled ? { 'cache-control': `public, s-maxage=${Math.max(2, r.intervalSec - 1)}, stale-while-revalidate=${r.intervalSec}` } : { 'cache-control': 'public, s-maxage=30' }); }
+    // Real-time prices cost provider calls: members and admin only. Visitors get the delayed feed.
+    if (p === '/rt/config') { const who = await roleOf(request, env, url); const s = rtSettings(config); if (!canLive(who)) return json({ ok: true, enabled: false, role: who.role, liveAvailable: s.enabled, polled: [], stream: null, sockets: [] }); return json({ ok: true, role: who.role, member: who.member || null, ...(await publicConfig(ctx)) }); }
+    if (p === '/rt/quotes') { if (!canLive(await roleOf(request, env, url))) return error('Live prices are for members. Sign in with your PIN.', 401); const r = await rtQuotes(ctx); return json({ ok: true, generatedAt: new Date().toISOString(), ms: Date.now() - started, ...r }, 200, r.enabled ? { 'cache-control': 'private, no-store' } : { 'cache-control': 'private, no-store' }); }
     if (p === '/intel/explain') {
       // Model calls cost money: admin only. Visitors read the stored reading from /intel/reading.
       const auth = checkAdminAuth(request, env); if (!auth.ok) return error('Refreshing the AI reading requires the admin token', 401);
@@ -137,6 +142,8 @@ async function handleApi(request, env, url) {
       if (p === '/admin/tv' && request.method === 'GET') return wrap({ ...(await getChannels(ctx)), defaults: DEFAULT_CHANNELS });
       if (p === '/admin/tv' && request.method === 'POST') { const body = await request.json().catch(() => ({})); return wrap(body.reset ? await resetChannels(ctx) : await saveChannels(ctx, body.channels)); }
       if (p === '/admin/realtime' && request.method === 'POST') { const body = await request.json().catch(() => ({})); const patch = {}; if (Array.isArray(body.priority)) patch.priority = body.priority; if (body.overrides) patch.overrides = body.overrides; return wrap({ routing: await saveRouting(ctx, patch) }); }
+      if (p === '/admin/members' && request.method === 'GET') return wrap({ members: await listMembers(env), liveOn: rtSettings(config).enabled });
+      if (p === '/admin/members' && request.method === 'POST') { const body = await request.json().catch(() => ({})); try { return wrap({ members: await manageMembers(env, body) }); } catch (e) { return error(e.message, e.status || 400); } }
       if (p === '/admin/usage' && request.method === 'GET') return json({ ok: true, ...(await U.report(env.__store, Math.max(1, Math.min(31, Number(url.searchParams.get('days')) || 7)))) }, 200, { 'cache-control': 'no-store' });
       if (p === '/admin/usage/prices' && request.method === 'POST') { const body = await request.json().catch(() => ({})); return wrap({ prices: await U.savePrices(env.__store, body) }); }
       if (p === '/admin/usage/flush' && request.method === 'POST') return wrap({ flush: await U.flush(env.__store, { force: true }), compact: await U.compact(env.__store).catch(e => ({ error: e.message })) });
@@ -171,7 +178,7 @@ async function handleApi(request, env, url) {
         const quotes = await getQuotes(ctx, null);
         const bySource = {};
         for (const q of quotes) { const s = bySource[q.source] || (bySource[q.source] = { ok: 0, failed: 0, stale: 0, errors: [] }); if (q.available) s.ok++; else { s.failed++; if (q.error && s.errors.length < 3) s.errors.push(`${q.id}: ${q.error}`); } if (q.stale) s.stale++; }
-        return wrap({ bySource, demoMode: config.demoMode, kv: !!env.CACHE, d1: !!env.HISTORY });
+        return wrap({ bySource, demoMode: config.demoMode, kv: !!env.CACHE, d1: !!env.HISTORY, store: env.__store ? { backend: env.__store.name, persistent: env.__store.persistent } : null });
       }
       return error('Not found', 404);
     }
