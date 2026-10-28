@@ -1310,3 +1310,4 @@ body.admin-mode #help-btn { display: none !important; }
 .rt-tbl select { min-width: 118px; padding-right: 30px; background-position: right 9px center; }
 #adm-fields select { min-width: 220px; }
 .rt-p .icon-btn.sm { width: 24px; height: 24px; }
+#ai-meta { display: inline-flex; align-items: center; gap: 8px; }
