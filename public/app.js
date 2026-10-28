@@ -24,6 +24,7 @@
     back: '<path d="m15 18-6-6 6-6"/>',
     home: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>',
     check: '<path d="M20 6 9 17l-5-5"/>',
+    shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
     help: '<circle cx="12" cy="12" r="9.5"/><path d="M9.4 9.2a2.7 2.7 0 0 1 5.2 1c0 1.9-2.6 2.4-2.6 4.1"/><path d="M12 17.6h.01"/>',
     sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
     moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
@@ -764,7 +765,12 @@
   async function renderFlows() {
     const v = $('#view-flows'); v.innerHTML = loading('Loading flow series…');
     const f = await api('/flows'); const T = tok();
-    v.innerHTML = `<div class="callout">${ic('info')}<div>Only measured balance changes count as <b>flows</b> here: stablecoin net issuance and Federal Reserve liquidity. Traded volume and price changes are shown separately and are never read as inflows. Where no licensed data feed exists, the section says so instead of estimating.</div></div><div class="grid g-2" id="flow-grid"></div>`;
+    v.innerHTML = `<div class="callout">${ic('info')}<div>Only measured balance changes count as <b>flows</b> here: stablecoin net issuance and Federal Reserve liquidity. Traded volume and price changes are shown separately and are never read as inflows. Where no licensed data feed exists, the section says so instead of estimating.</div></div><div class="grid g-2" id="flow-grid"></div>
+      <div class="flow-sec-h"><h2>${ic('globe')}World bonds</h2><p>Sovereign yields and their deviations, bond-market performance, and cross-border flows into sovereign debt. Indonesia, EM and the markets that move them.</p></div>
+      <div id="wb-box">${loading('Loading sovereign yields, TIC holdings and bond ETFs…')}</div>
+      <div class="flow-sec-h"><h2>${ic('shield')}Fixed income credit monitor</h2><p>Option-adjusted spreads by market, rating, maturity and sector, a pressure reading for each, and the latest credit headlines.</p></div>
+      <div id="cm-box">${loading('Loading credit spreads…')}</div>`;
+    renderWorldBonds(); renderCreditMonitor();
     const g = $('#flow-grid'); const sIcon = { stablecoins: 'coins', fed_liquidity: 'bank', crypto_volume: 'pulse', etf_flows: 'layers', exchange_flows: 'swap' };
     for (const sec of f.sections) {
       if (sec.unavailable) { g.insertAdjacentHTML('beforeend', card({ icon: sIcon[sec.id], title: esc(sec.title), actions: '<span class="badge bad">not connected</span>', body: `<p class="dim">${esc(sec.reason)}</p>` })); continue; }
@@ -776,6 +782,77 @@
       g.insertAdjacentHTML('beforeend', card({ icon: sIcon[sec.id], title: esc(sec.title.replace(/ \(USD.*?\)| — .*/g, '')), sub: sec.type === 'volume' ? 'Turnover, not a capital flow' : 'USD billions', actions: `<span class="badge ${sec.type === 'volume' ? 'eod' : 'measured'}">${sec.type}</span>`, body: `<div class="mini" style="grid-template-columns:repeat(auto-fit,minmax(170px,1fr))">${items}</div>${sec.type !== 'volume' ? `<div id="${id}" class="ch-sm ch" style="margin-top:14px"></div>` : ''}`, foot: esc(sec.measure) }));
       if (sec.type !== 'volume') { const S = series(T); chart('#' + id, { grid: { left: 8, right: 12, top: 34, bottom: 8, containLabel: true }, legend: { top: 0, left: 0, type: 'scroll', icon: 'roundRect', itemWidth: 10, itemHeight: 4, textStyle: { color: T.fg2, fontSize: 11 } }, tooltip: { trigger: 'axis', valueFormatter: v => v == null ? '—' : fmt.big(v * 1e9) }, xAxis: { type: 'time', ...axis(T), splitLine: { show: false } }, yAxis: { type: 'value', scale: true, ...axis(T) }, series: sec.items.filter(it => it.series && it.series.length).slice(0, 2).map((it, i) => ({ name: it.name, type: 'line', showSymbol: false, data: it.series, lineStyle: { width: 1.6, color: S[i + 1] }, itemStyle: { color: S[i + 1] } })) }); }
     }
+  }
+
+  /* ───────── World bonds (WB) ───────── */
+  const bpf = (v) => (v == null ? '—' : `${v > 0 ? '+' : ''}${v} bp`);
+  const bpTone = (v) => (v == null ? '' : v > 0 ? 'down' : v < 0 ? 'up' : ''); // for yields and spreads, up is "worse"
+  const pctBar = (p, cls = '') => (p == null ? '—' : `<span class="pbar ${cls}" title="${p}th percentile of its own range"><i style="width:${p}%"></i><b>${p}</b></span>`);
+  const freqBadge = (f, asOf) => (f === 'daily' ? esc(fmt.date(asOf)) : `${esc(String(asOf).slice(0, 7))} <span class="badge stale" style="padding:0 5px">monthly</span>`);
+  const wbState = { tic: 'top', etfWin: 'm3' };
+  async function renderWorldBonds() {
+    const box = $('#wb-box'); if (!box) return;
+    let d; try { d = await api('/bonds/world'); } catch (e) { box.innerHTML = errorBox(e.message); return; }
+    const T = tok();
+    const idn = d.indonesia || {}; const m = idn.manual || {}; const curve = d.curve;
+    const tile = (label, value, sub, extra = '') => `<div class="wb-tile"><span class="lab">${label}</span><b>${value}</b><small>${sub}</small>${extra}</div>`;
+    const sovRows = d.sovereigns.map(s => s.error ? `<tr><td><b>${esc(s.name)}</b></td><td colspan="6" class="xs down">${esc(s.error.slice(0, 60))}</td></tr>` : `<tr class="${s.id === 'US' ? 'wb-us' : ''}"><td><b>${esc(s.name)}</b><div class="xs muted nowrap">${esc(s.region)} · ${freqBadge(s.freq, s.asOf)}</div></td><td class="num mono"><b>${s.latest.toFixed(2)}%</b></td><td class="num mono ${bpTone(s.d1m)}">${bpf(s.d1m)}</td><td class="num mono ${bpTone(s.d3m)} hide-sm">${bpf(s.d3m)}</td><td class="num mono ${bpTone(s.d1y)}">${bpf(s.d1y)}</td><td class="num mono">${s.id === 'US' ? '<span class="muted">base</span>' : bpf(s.vsUS)}</td><td>${pctBar(s.pct2y)}</td></tr>`).join('');
+    const idRow = `<tr class="wb-id"><td><b>Indonesia</b><div class="xs muted nowrap">EM · ${m.y10 != null ? `${esc(m.y10AsOf || 'date not set')} <span class="badge estimate" style="padding:0 5px">manual</span>` : '<span class="badge bad" style="padding:0 5px">not set</span>'}</div></td><td class="num mono"><b>${m.y10 != null ? m.y10.toFixed(2) + '%' : '—'}</b></td><td class="num mono muted">—</td><td class="num mono muted hide-sm">—</td><td class="num mono muted">—</td><td class="num mono">${m.y10 != null ? bpf(idn.vsUS) : '—'}</td><td class="xs muted">${m.y10 != null ? esc(m.source || '') : 'No free feed publishes it. Admin → API keys → Indonesia bonds.'}</td></tr>`;
+    const tic = d.tic && !d.tic.error ? d.tic : null;
+    const ticRows = (list) => list.map(t => `<tr><td><b>${esc(t.name)}</b></td><td class="num mono">${fmt.px(t.latest)}</td><td class="num mono ${tone(t.d1m)}">${t.d1m == null ? '—' : (t.d1m > 0 ? '+' : '') + t.d1m}</td><td class="num mono ${tone(t.d12m)}">${t.d12m == null ? '—' : (t.d12m > 0 ? '+' : '') + t.d12m}</td></tr>`).join('');
+    const etfRows = d.etfs.map(e => e.error ? `<tr><td><b>${e.id}</b> ${esc(e.name)}</td><td colspan="6" class="xs down">${esc(e.error)}</td></tr>` : `<tr><td><b>${e.id}</b><div class="xs muted">${esc(e.name)}</div></td><td class="xs muted">${esc(e.group)}</td><td class="num mono ${tone(e.w1)}">${fmt.pct(e.w1)}</td><td class="num mono ${tone(e.m1)}">${fmt.pct(e.m1)}</td><td class="num mono ${tone(e.m3)}">${fmt.pct(e.m3)}</td><td class="num mono ${tone(e.ytd)}">${fmt.pct(e.ytd)}</td><td class="num mono ${tone(e.y1)} hide-sm">${fmt.pct(e.y1)}</td></tr>`).join('');
+    box.innerHTML = `<div class="wb">
+      <div class="wb-tiles">
+        ${curve ? tile('US 10Y Treasury', `${curve.y10.toFixed(2)}%`, `2Y ${curve.y2.toFixed(2)} · 30Y ${curve.y30.toFixed(2)} · 2s10s ${bpf(curve.s2s10)} · ${esc(fmt.date(curve.asOf))}`) : ''}
+        ${tic && tic.total ? tile('Foreign-held US Treasuries', '$' + fmt.px(tic.total.latest) + ' bn', `${esc(tic.asOf)} · 1M ${(tic.total.d1m > 0 ? '+' : '') + tic.total.d1m} · 12M ${(tic.total.d12m > 0 ? '+' : '') + tic.total.d12m} bn · TIC`) : ''}
+        ${tile('Indonesia 10Y', m.y10 != null ? m.y10.toFixed(2) + '%' : '<span class="muted">not set</span>', m.y10 != null ? `${esc(m.y10AsOf || '')} · vs US ${bpf(idn.vsUS)} · ${esc(m.source || 'manual')}` : 'No free source; admin can enter it')}
+        ${idn.reserves ? tile('Indonesia FX reserves', '$' + idn.reserves.latest.toFixed(1) + ' bn', `${esc(String(idn.reserves.asOf).slice(0, 7))} · 1M ${(idn.reserves.d1m > 0 ? '+' : '') + idn.reserves.d1m} · 1Y ${idn.reserves.d1y == null ? '—' : (idn.reserves.d1y > 0 ? '+' : '') + idn.reserves.d1y} bn · excl. gold, FRED`) : ''}
+        ${tile('Foreign holdings of SBN', m.sbnForeignTn != null ? 'Rp ' + fmt.px(m.sbnForeignTn) + ' tn' : '<span class="muted">not set</span>', m.sbnForeignTn != null ? `${m.sbnForeignPct != null ? m.sbnForeignPct + '% of tradable SBN · ' : ''}${esc(m.sbnAsOf || '')} · ${esc(m.source || 'DJPPR')}` : 'DJPPR publishes it as PDF; admin can enter it')}
+        ${idn.overnightRate ? tile('Indonesia overnight rate', idn.overnightRate.latest.toFixed(2) + '%', `${esc(String(idn.overnightRate.asOf).slice(0, 7))} · 1Y ${bpf(idn.overnightRate.d1y)} · interbank, monthly avg`) : ''}
+      </div>
+      <div class="grid g-main wb-grid">
+        ${card({ icon: 'line', title: 'Sovereign 10-year yields and deviations', sub: 'Level, change, spread versus the US, and where each sits in its own two-year range', bodyClass: 'flush', body: `<div class="tbl"><table class="t wb-t"><thead><tr><th>Market</th><th class="num">10Y</th><th class="num">1M</th><th class="num hide-sm">3M</th><th class="num">1Y</th><th class="num">vs US</th><th>2Y range</th></tr></thead><tbody>${sovRows}${idRow}</tbody></table></div>`, foot: esc(d.notes.yields) })}
+        ${card({ icon: 'swap', title: 'Cross-border flows into US Treasuries', sub: 'Foreign holdings by country, USD bn · US Treasury TIC', actions: '<span id="wb-tic-seg"></span>', bodyClass: 'flush', body: tic ? `<div class="tbl"><table class="t wb-t"><thead><tr><th>Holder</th><th class="num">${esc(tic.asOf)}</th><th class="num">1M</th><th class="num">12M</th></tr></thead><tbody id="wb-tic-rows">${ticRows(tic.top)}</tbody></table></div>` : errorBox((d.tic && d.tic.error) || 'TIC data unavailable'), foot: `${tic && tic.indonesia ? `Indonesia holds $${fmt.px(tic.indonesia.latest)} bn of US Treasuries (${esc(tic.indonesia.asOf)}, 1M ${(tic.indonesia.d1m > 0 ? '+' : '') + tic.indonesia.d1m}, 12M ${tic.indonesia.d12m == null ? '—' : (tic.indonesia.d12m > 0 ? '+' : '') + tic.indonesia.d12m} bn; ${esc(tic.indonesia.note)}) · ` : ''}${d.foreignHeldUS ? `All foreign and international investors held $${d.foreignHeldUS.latest} tn of US federal debt at ${esc(String(d.foreignHeldUS.asOf).slice(0, 7))} (FRED FDHBFIN, quarterly). ` : ''}${esc(d.notes.flows)}` })}
+      </div>
+      ${card({ icon: 'analytics', title: 'National bond-market performance', sub: 'ETF proxies, price return', actions: '<span id="wb-etf-seg"></span>', body: `<div class="grid g-main wb-perf"><div class="tbl"><table class="t wb-t"><thead><tr><th>Fund</th><th>Market</th><th class="num">1W</th><th class="num">1M</th><th class="num">3M</th><th class="num">YTD</th><th class="num hide-sm">1Y</th></tr></thead><tbody>${etfRows}</tbody></table></div><div id="wb-etf-chart" class="ch"></div></div>`, foot: esc(d.notes.performance) })}
+    </div>`;
+    if (tic) mount('#wb-tic-seg', seg([['top', 'Top holders'], ['asia', 'Asia & Indonesia']], wbState.tic, (v) => { wbState.tic = v; $('#wb-tic-rows').innerHTML = ticRows(v === 'asia' ? tic.asia : tic.top); }, ''));
+    const S = series(T);
+    const ok = d.etfs.filter(e => !e.error && e.spark && e.spark.length);
+    chart('#wb-etf-chart', { grid: { left: 8, right: 10, top: 30, bottom: 8, containLabel: true }, legend: { top: 0, left: 0, type: 'scroll', icon: 'roundRect', itemWidth: 10, itemHeight: 10, textStyle: { color: T.fg2, fontSize: 11 * fs() } }, tooltip: { trigger: 'axis', valueFormatter: v => v.toFixed(1) }, xAxis: { type: 'time', ...axis(T), splitLine: { show: false } }, yAxis: { type: 'value', scale: true, ...axis(T), axisLabel: { color: T.fg3, fontSize: 10.5 * fs(), formatter: v => v.toFixed(0) } }, series: ok.map((e, i) => ({ name: e.id, type: 'line', showSymbol: false, data: e.spark, lineStyle: { width: 1.5, color: S[i % S.length] }, itemStyle: { color: S[i % S.length] } })) });
+  }
+
+  /* ───────── Fixed income credit monitor (FICM) ───────── */
+  const cmState = { group: 'US' };
+  const pLevel = (p) => (!p ? '' : `<span class="pp ${p.level}" title="${esc(p.notes.join('; ') || 'pressure score ' + p.score)}"><i style="width:${p.score}%"></i><b>${p.score}</b> ${p.level}</span>`);
+  async function renderCreditMonitor() {
+    const box = $('#cm-box'); if (!box) return;
+    let d, news; try { [d, news] = await Promise.all([api('/credit/monitor'), api('/credit/news').catch(() => null)]); } catch (e) { box.innerHTML = errorBox(e.message); return; }
+    const rows = d.rows.filter(r => !r.error); const byId = Object.fromEntries(rows.map(r => [r.id, r]));
+    const groups = [['US', 'US'], ['EM', 'Emerging markets'], ['Europe', 'Europe']];
+    const kinds = { headline: 'Headline', rating: 'By rating', maturity: 'By maturity', region: 'By region', sector: 'By issuer type' };
+    const rangeBar = (r) => { const lo = r.lo1y, hi = r.hi1y, v = r.latest; const p = hi > lo ? Math.round((v - lo) / (hi - lo) * 100) : 50; return `<span class="rng" title="1-year range ${Math.round(lo * 100)}–${Math.round(hi * 100)} bp"><i style="left:${Math.max(0, Math.min(100, p))}%"></i></span>`; };
+    const row = (r) => `<tr><td><b>${esc(r.name)}</b><div class="xs muted hide-sm">1W ${bpf(r.d1w)} · ${r.pct3y == null ? '' : r.pct3y + 'th pctile of 3Y'}</div></td><td class="num mono"><b>${r.latestBp}</b></td><td class="num mono ${bpTone(r.d1d)}">${bpf(r.d1d)}</td><td class="num mono ${bpTone(r.d1m)}">${bpf(r.d1m)}</td><td class="num mono ${bpTone(r.ytd)} hide-sm">${bpf(r.ytd)}</td><td>${rangeBar(r)}</td><td>${pLevel(r.pressure)}</td></tr>`;
+    const table = (g) => { const list = rows.filter(r => r.group === g); const order = ['headline', 'region', 'sector', 'rating', 'maturity']; return order.filter(k => list.some(r => r.kind === k)).map(k => `<tr class="cm-grp"><td colspan="7">${kinds[k]}</td></tr>` + list.filter(r => r.kind === k).map(row).join('')).join(''); };
+    const gauge = (g) => `<div class="cm-g" title="${esc(g.why)}"><span>${esc(g.label)}</span><b>${g.value == null ? '—' : g.unit === '×' ? g.value.toFixed(2) + '×' : (g.value > 0 ? '+' : '') + g.value + ' bp'}</b></div>`;
+    const etfRows = d.etfs.map(e => e.error ? '' : `<tr><td><b>${e.id}</b><div class="xs muted">${esc(e.name)}</div></td><td class="num mono ${tone(e.w1)}">${fmt.pct(e.w1)}</td><td class="num mono ${tone(e.m1)}">${fmt.pct(e.m1)}</td><td class="num mono ${tone(e.m3)}">${fmt.pct(e.m3)}</td><td class="num mono ${tone(e.y1)}">${fmt.pct(e.y1)}</td></tr>`).join('');
+    const newsRows = news && news.items.length ? news.items.slice(0, 14).map(n => `<a class="cm-n" href="${esc(n.url)}" target="_blank" rel="noopener"><span class="cm-nt">${esc(n.title)}</span><span class="cm-nm"><span class="chip-mkt ${n.market.toLowerCase()}">${esc(n.market)}</span>${n.tone ? `<span class="chip-tone ${n.tone}">${n.tone}</span>` : ''}<span class="xs muted">${esc(n.source)} · ${fmt.ago(n.publishedAt)}</span></span></a>`).join('') : `<p class="dim sm">No credit headlines in the last day.</p>`;
+    const ov = d.overall;
+    box.innerHTML = `<div class="cm">
+      <div class="cm-top">
+        <div class="cm-overall ${ov ? ov.level : ''}"><span class="lab">Credit pressure</span><div class="cm-ov-v"><b>${ov ? ov.score : '—'}</b><span>${ov ? ov.level : ''}</span></div><span class="meter"><i style="width:${ov ? ov.score : 0}%"></i></span><small>Average of US IG, US HY, EM, EM IG, EM HY, EM Asia and Euro HY. 0 calm → 100 stressed.</small></div>
+        <div class="cm-gauges">${d.gauges.map(gauge).join('')}</div>
+      </div>
+      <div class="grid g-main cm-grid">
+        ${card({ icon: 'grid', title: 'Spreads and pressure', sub: 'Option-adjusted spread in bp, changes, 1-year range and pressure reading', actions: '<span id="cm-seg"></span>', bodyClass: 'flush', body: `<div class="tbl"><table class="t cm-t"><thead><tr><th>Segment</th><th class="num">OAS bp</th><th class="num">1D</th><th class="num">1M</th><th class="num hide-sm">YTD</th><th>1Y range</th><th>Pressure</th></tr></thead><tbody id="cm-rows">${table(cmState.group)}</tbody></table></div>`, foot: `${esc(d.notes.spreads)} ${esc(d.notes.pressure)}` })}
+        <div style="display:flex;flex-direction:column;gap:var(--gap);min-width:0">
+          ${card({ icon: 'flag', title: 'Indonesia and EM read-across', body: `<div class="cm-id">${['EM_ASIA', 'EM_PUB', 'EM_IG', 'EM_HY'].map(id => byId[id]).filter(Boolean).map(r => `<div class="cm-id-row"><div><b>${esc(r.name)}</b><div class="xs muted">${r.latestBp} bp · 1M ${bpf(r.d1m)} · ${r.pct3y}th pctile of 3Y</div></div>${pLevel(r.pressure)}</div>`).join('')}</div><p class="xs muted" style="margin-top:10px">${esc(d.notes.indonesia)}</p>` })}
+          ${card({ icon: 'layers', title: 'Credit ETFs', sub: 'Price return', bodyClass: 'flush', body: `<div class="tbl"><table class="t"><thead><tr><th>Fund</th><th class="num">1W</th><th class="num">1M</th><th class="num">3M</th><th class="num">1Y</th></tr></thead><tbody>${etfRows}</tbody></table></div>` })}
+          ${card({ icon: 'news', title: 'Credit and bond headlines', sub: 'Global, EM and Indonesia · from the news feeds', body: `<div class="cm-news">${newsRows}</div>` })}
+        </div>
+      </div>
+    </div>`;
+    mount('#cm-seg', seg(groups, cmState.group, (v) => { cmState.group = v; $('#cm-rows').innerHTML = table(v); }, ''));
   }
 
   /* ═════════════════════ ANALYTICS ═════════════════════ */

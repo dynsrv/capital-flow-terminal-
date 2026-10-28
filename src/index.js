@@ -13,9 +13,10 @@ import * as I from './insights.js';
 import { testCredential } from './keytest.js';
 import { preCrash } from './precrash.js';
 import { recentEpisodes } from './recent.js';
+import { worldBonds, creditMonitor } from './bonds.js';
 import { currentAnomalies, scanAnomalies, scheduledScan, scanLog, anomalyMode, nextRun } from './anomscan.js';
 import { getReading, refreshReading, scheduledRefresh, listModels, listReadings } from './reading.js';
-import { fetchNews, curateNews, getCurated, SOURCES as NEWS_SOURCES } from './news.js';
+import { fetchNews, curateNews, getCurated, creditNews, SOURCES as NEWS_SOURCES } from './news.js';
 import { getChannels, saveChannels, resetChannels, hlsRelay, DEFAULT_CHANNELS } from './tv.js';
 import * as U from './lib/usage.js';
 import { roleOf, canLive, signIn, listMembers, manageMembers } from './lib/auth.js';
@@ -28,7 +29,7 @@ function ctxFor(env, config) { return { env, config, cache: createCache(env) }; 
 function withStore(env) { if (!env.__store) { try { env.__store = createStore(env); } catch (e) { env.__store = null; } } return env; }
 
 // CDN cache policy for public GET routes (seconds). Admin, cron and POST routes are never cached.
-const CDN_TTL = [[/^\/ui$/, 60], [/^\/quotes/, 30], [/^\/performance|^\/overview|^\/analytics\/regime|^\/news|^\/tv/, 120], [/^\/history/, 600], [/^\/analytics|^\/shock|^\/flows/, 300], [/^\/risk|^\/intel/, 300], [/^\/universe|^\/health/, 60]];
+const CDN_TTL = [[/^\/ui$/, 60], [/^\/quotes/, 30], [/^\/performance|^\/overview|^\/analytics\/regime|^\/news|^\/tv/, 120], [/^\/history/, 600], [/^\/analytics|^\/shock|^\/flows|^\/bonds|^\/credit/, 300], [/^\/risk|^\/intel/, 300], [/^\/universe|^\/health/, 60]];
 function cdnHeaders(p, method) { if (method !== 'GET' || p.startsWith('/admin') || p.startsWith('/cron')) return {}; const hit = CDN_TTL.find(([re]) => re.test(p)); return hit ? { 'cache-control': `public, s-maxage=${hit[1]}, stale-while-revalidate=${hit[1] * 4}` } : {}; }
 
 /** Daily state snapshot: what the dashboard itself read today (quotes, regime, stress, anomalies, signals). */
@@ -104,6 +105,9 @@ async function handleApi(request, env, url) {
     if (p === '/intel/patterns') return wrap(await A.patterns(ctx));
     if (p === '/intel/precrash') return wrap(await preCrash(ctx));
     if (p === '/intel/recent') return wrap(await recentEpisodes(ctx));
+    if (p === '/bonds/world') return wrap(await worldBonds(ctx));
+    if (p === '/credit/monitor') return wrap(await creditMonitor(ctx));
+    if (p === '/credit/news') return wrap(await creditNews(ctx));
     if (p === '/risk/table') { const t = await R.riskTable(ctx); t.rows.forEach(r => { r.reading = I.rowReading(r); }); return wrap(t); }
     if (p === '/risk/highlights') return wrap(await I.riskHighlights(ctx));
     if (p === '/risk/stress') return wrap(await R.stressIndex(ctx, Number(url.searchParams.get('years') || 2)));
@@ -136,7 +140,7 @@ async function handleApi(request, env, url) {
       const secret = env.CRON_SECRET; const auth = request.headers.get('authorization') || '';
       const okCron = secret && auth === `Bearer ${secret}`; const okAdmin = checkAdminAuth(request, env).ok;
       if (!okCron && !okAdmin) return error('Unauthorised', 401);
-      return streamJson(async () => ({ anomalies: await scheduledScan(ctx, 'us').catch(e => ({ error: e.message })), usage: await U.compact(env.__store).catch(e => ({ error: e.message })), histories: await persistHistories(ctx).catch(e => ({ error: e.message })), snapshot: await dailySnapshot(ctx).catch(e => ({ error: e.message })), ai: await scheduledRefresh(ctx).catch(e => ({ error: e.message })), realtimeScan: rtSettings(config).enabled ? await scanPlans(ctx).then(x => x.summary).catch(e => ({ error: e.message })) : { skipped: 'real-time off' }, news: (config.keys.NEWS_AI_CURATION || 'off') === 'daily' ? await curateNews(ctx).then(c => ({ curated: c.picks.length })).catch(e => ({ error: e.message })) : { skipped: 'news curation not scheduled' } }), config.demoMode);
+      return streamJson(async () => ({ anomalies: await scheduledScan(ctx, 'us').catch(e => ({ error: e.message })), bonds: await Promise.all([worldBonds(ctx), creditMonitor(ctx)]).then(() => 'warmed').catch(e => ({ error: e.message })), usage: await U.compact(env.__store).catch(e => ({ error: e.message })), histories: await persistHistories(ctx).catch(e => ({ error: e.message })), snapshot: await dailySnapshot(ctx).catch(e => ({ error: e.message })), ai: await scheduledRefresh(ctx).catch(e => ({ error: e.message })), realtimeScan: rtSettings(config).enabled ? await scanPlans(ctx).then(x => x.summary).catch(e => ({ error: e.message })) : { skipped: 'real-time off' }, news: (config.keys.NEWS_AI_CURATION || 'off') === 'daily' ? await curateNews(ctx).then(c => ({ curated: c.picks.length })).catch(e => ({ error: e.message })) : { skipped: 'news curation not scheduled' } }), config.demoMode);
     }
 
     if (p === '/shock/betas') {

@@ -13,6 +13,8 @@ export const SOURCES = [
   { id: 'gn-central', name: 'Google News · central banks', region: 'global', cat: 'financial', url: gn('"Federal Reserve" OR ECB OR "Bank of Japan" OR "rate decision" OR inflation when:1d', 'en') },
   { id: 'gn-geo', name: 'Google News · geopolitics', region: 'global', cat: 'geopolitical', url: gn('geopolitical OR sanctions OR tariffs OR "Middle East" OR Taiwan OR Ukraine markets when:1d', 'en') },
   { id: 'gn-commod', name: 'Google News · commodities & crypto', region: 'global', cat: 'market', url: gn('oil prices OR gold price OR bitcoin OR OPEC when:1d', 'en') },
+  { id: 'gn-credit', name: 'Google News · credit & bonds', region: 'global', cat: 'financial', url: gn('"credit spreads" OR "high yield" OR "junk bonds" OR "investment grade" OR downgrade OR "bond yields" OR "emerging market bonds" when:2d', 'en'), topic: 'credit' },
+  { id: 'gn-id-bonds', name: 'Google News · obligasi & SBN', region: 'indonesia', cat: 'financial', url: gn('SBN OR "obligasi negara" OR "yield SUN" OR "surat utang" OR "imbal hasil" OR "kepemilikan asing" when:3d', 'id'), topic: 'credit' },
   { id: 'mw', name: 'MarketWatch', region: 'global', cat: 'market', url: 'https://feeds.content.dowjones.io/public/rss/mw_topstories', strict: true },
   { id: 'bbc-biz', name: 'BBC Business', region: 'global', cat: 'financial', url: 'https://feeds.bbci.co.uk/news/business/rss.xml' },
   { id: 'aj', name: 'Al Jazeera', region: 'global', cat: 'geopolitical', url: 'https://www.aljazeera.com/xml/rss/all.xml', strict: true },
@@ -90,4 +92,20 @@ export async function curateNews(ctx, { model } = {}) {
 export async function getCurated(ctx) {
   if (ctx.env.__store) { try { const v = await ctx.env.__store.getJSON('news/curated', { maxAgeMs: 60e3 }); if (v) return v; } catch (e) {} }
   const c = await ctx.cache.read('news:curated'); return c ? c.data : null;
+}
+
+/* ───────── Credit and bond headlines for the Fixed Income Credit Monitor ───────── */
+const CREDIT_RE = /\b(bond|bonds|yield|yields|treasur|credit|spread|high[- ]yield|junk|investment[- ]grade|downgrade|upgrade|default|rating|moody|fitch|s&p global|sovereign|debt|sukuk|obligasi|sbn|sun\b|surat utang|imbal hasil|kupon|lelang|emerging market|em debt|rupiah|bank indonesia|fed |federal reserve|rate cut|rate hike|ecb|boj)/i;
+const NOT_CREDIT_RE = /savings rate|savings account|\bcd rate|certificate of deposit|mortgage rate|refinanc|credit card|personal loan|auto loan|student loan|deposito|kpr\b|kartu kredit/i;
+export async function creditNews(ctx) {
+  const feed = await fetchNews(ctx);
+  const bySrc = Object.fromEntries(SOURCES.map(s => [s.id, s]));
+  // the credit feeds in full (the main feed is capped at 160 items), plus any other headline that reads as credit or rates
+  const extra = []; for (const src of SOURCES.filter(x => x.topic === 'credit')) { const c = await ctx.cache.read(`news:${src.id}`); if (c && Array.isArray(c.data)) extra.push(...c.data); }
+  const seen = new Set(); const items = [];
+  for (const it of [...extra, ...feed.items]) { const k = it.title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); if (seen.has(k)) continue; if (NOT_CREDIT_RE.test(it.title)) continue; if (!((bySrc[it.feed] && bySrc[it.feed].topic === 'credit') || CREDIT_RE.test(it.title))) continue; seen.add(k); items.push(it); }
+  items.sort((a, b) => (Date.parse(b.publishedAt || 0) || 0) - (Date.parse(a.publishedAt || 0) || 0));
+  const tag = (t) => /sbn|obligasi|rupiah|indonesia|sukuk|surat utang|imbal hasil|bank indonesia|lelang|\bsun\b|\bri\b|jakarta|ihsg|kemenkeu|sri mulyani/i.test(t) ? 'Indonesia' : /emerging|\bem\b|asia|china|india|brazil|mexico|turkey|south africa/i.test(t) ? 'EM' : 'Global';
+  const pressureHint = (t) => /downgrade|default|distress|sell-?off|selloff|widen|jump|surge|spike|outflow|dump|junk|rout|slump|plunge|tumble|cut to junk|restructur/i.test(t) ? 'pressure' : /upgrade|tighten|rally|inflow|record low|narrow|demand|oversubscribed/i.test(t) ? 'relief' : null;
+  return { items: items.slice(0, 24).map(it => ({ title: it.title, url: it.link, source: it.source, publishedAt: it.publishedAt, region: it.region, market: tag(it.title), tone: pressureHint(it.title) })), fetchedAt: new Date().toISOString() };
 }

@@ -107,6 +107,28 @@ operations and our own function invocations are counted too, as are live-TV rela
 - **Settings:** *Usage meter* (on/off) and *Usage save interval* in the credentials panel (group Usage).
 - Admin keys are now read from storage at most once every 30 s per instance instead of on every request.
 
+## Flows page: World Bonds and Fixed Income Credit Monitor
+
+**World bonds** (`/api/bonds/world`): 10-year sovereign yields for 13 markets (US daily from FRED DGS10; Germany, Japan, UK,
+France, Italy, Spain, Switzerland, Canada, Australia, Korea, Mexico, South Africa as OECD monthly averages via FRED), each with
+1M/3M/1Y change, spread versus the US and its percentile within its own two-year range; the US 2Y/10Y/30Y curve; bond-market
+performance through ETF proxies (TLT, IEF, BWX, BNDX, EMB, EMLC, EMHY; price return, Yahoo); cross-border flows as foreign
+holdings of US Treasuries by country from the US Treasury TIC Table 5 (monthly), with an Asia & Indonesia view and the
+Indonesia row from the TIC history file; Indonesia FX reserves (FRED TRESEGIDM052N) and the overnight interbank rate
+(IRSTCI01IDM156N). Indonesia's 10-year yield and foreign holdings of SBN have no free feed (DJPPR publishes PDFs), so Admin →
+API keys → *Indonesia bonds* lets the admin enter them with a date and source; they are shown as *manual*.
+
+**Fixed income credit monitor** (`/api/credit/monitor`, `/api/credit/news`): ICE BofA option-adjusted spreads from FRED for
+US IG and HY, US ratings AAA–CCC, US maturity buckets, EM (all, IG, HY, Asia, EMEA, Latin America, public-sector and private
+issuers, financials and non-financials, ratings AAA–A to B & lower), Euro HY and euro-denominated EM. Each has 1D/1W/1M/YTD
+changes, a 1-year range, a 3-year percentile and a 0–100 *pressure* reading (55% where it sits in its 3-year range, the rest
+how fast it widened over the week and month); the headline gauge averages US IG, US HY, EM, EM IG, EM HY, EM Asia and Euro HY.
+Six relative gauges (HY÷IG, CCC−BB, EM−US, EM HY−US HY, Asia−EM, sovereign−private), credit ETFs (LQD, HYG, EMB, EMHY, EMLC)
+and credit/bond headlines filtered from the news feeds (two extra Google News feeds: credit & bonds, obligasi & SBN), tagged
+Indonesia / EM / Global with a pressure or relief hint. Industry-level sectors need a licensed ICE or Bloomberg feed and are not
+shown. FRED series are cached for 6 hours and warmed by the nightly job; a free FRED API key (Admin → API keys → Data) avoids the
+keyless rate limit.
+
 ## Detected anomalies: how and when
 
 Each instrument's latest 1-day and 5-day change is compared with its own daily changes over roughly the last year (log

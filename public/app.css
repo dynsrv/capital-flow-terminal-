@@ -1403,3 +1403,60 @@ select.dd-open, select:focus-visible { outline: none; border-color: #fb8b1e; box
 .roll-vs { font-size: calc(12px * var(--fs, 1)); color: var(--fg-3); }
 .card-b.grow { flex: 1 1 auto; display: flex; flex-direction: column; }
 .card-b.grow > .ch { flex: 1 1 auto; min-height: 360px; height: auto; }
+
+/* ───────── Flows: world bonds and credit monitor ───────── */
+.flow-sec-h { margin: 26px 0 12px; }
+.flow-sec-h h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 4px; font-size: calc(18px * var(--fs, 1)); letter-spacing: -.01em; }
+.flow-sec-h h2 svg { width: 18px; height: 18px; color: var(--fg-2); }
+.flow-sec-h p { margin: 0; color: var(--fg-3); font-size: calc(12.5px * var(--fs, 1)); max-width: 820px; }
+.wb, .cm { display: flex; flex-direction: column; gap: var(--gap); min-width: 0; }
+.wb-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.wb-tile { background: var(--surface); padding: 12px 14px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.wb-tile .lab { font-size: calc(11.5px * var(--fs, 1)); color: var(--fg-3); }
+.wb-tile b { font-family: var(--mono); font-size: calc(17px * var(--fs, 1)); font-weight: 600; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wb-tile small { font-size: calc(11px * var(--fs, 1)); color: var(--fg-3); line-height: 1.4; }
+.wb-t td, .cm-t td { font-size: calc(12.5px * var(--fs, 1)); }
+.wb-t .wb-us td { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.wb-t .wb-id td { background: color-mix(in srgb, #ce1126 7%, transparent); }
+.pbar { position: relative; display: inline-flex; align-items: center; width: 72px; height: 16px; border-radius: 4px; background: var(--raised); overflow: hidden; vertical-align: middle; }
+.pbar i { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--accent) 55%, transparent); }
+.pbar b { position: relative; z-index: 1; font: 600 calc(10.5px * var(--fs, 1)) var(--mono); padding-left: 6px; }
+.wb-perf, .wb-grid, .cm-grid { align-items: start; }
+.cm-news { max-height: 560px; overflow-y: auto; }
+table.t.wb-t td > div.xs.nowrap { white-space: nowrap; }
+.wb-perf .ch { min-height: 300px; }
+.rng { position: relative; display: inline-block; width: 90px; height: 6px; border-radius: 999px; background: linear-gradient(90deg, var(--up), var(--warn), var(--down)); opacity: .9; vertical-align: middle; }
+.rng i { position: absolute; top: -4px; width: 3px; height: 14px; margin-left: -1.5px; border-radius: 2px; background: var(--fg); box-shadow: 0 0 0 1px var(--surface); }
+.pp { position: relative; display: inline-flex; align-items: center; gap: 6px; min-width: 112px; height: 20px; padding: 0 8px; border-radius: 6px; background: var(--raised); overflow: hidden; font-size: calc(11px * var(--fs, 1)); color: var(--fg-2); white-space: nowrap; }
+.pp i { position: absolute; inset: 0 auto 0 0; opacity: .28; }
+.pp b { position: relative; font-family: var(--mono); }
+.pp.calm i { background: var(--up); } .pp.normal i { background: var(--fg-3); } .pp.elevated i { background: var(--warn); } .pp.stressed i { background: var(--down); }
+.pp.stressed { color: var(--fg); }
+.cm-grp td { background: var(--surface-2); color: var(--fg-3); font-size: calc(11px * var(--fs, 1)); font-weight: 600; padding-top: 6px; padding-bottom: 6px; }
+.cm-top { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 2fr); gap: var(--gap); align-items: stretch; }
+.cm-overall { display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.cm-overall .lab { font-size: calc(11.5px * var(--fs, 1)); color: var(--fg-3); }
+.cm-ov-v { display: flex; align-items: baseline; gap: 10px; }
+.cm-ov-v b { font: 600 calc(34px * var(--fs, 1)) var(--mono); line-height: 1; letter-spacing: -.02em; }
+.cm-ov-v span { font-size: calc(14px * var(--fs, 1)); color: var(--fg-2); }
+.cm-overall .meter i { background: var(--fg-3); }
+.cm-overall.calm .meter i, .cm-overall.calm .cm-ov-v span { background: var(--up); color: var(--up); } .cm-overall.calm .meter i { color: inherit; }
+.cm-overall.elevated .meter i { background: var(--warn); } .cm-overall.elevated .cm-ov-v span { color: var(--warn); }
+.cm-overall.stressed .meter i { background: var(--down); } .cm-overall.stressed .cm-ov-v span { color: var(--down); }
+.cm-overall small { font-size: calc(11px * var(--fs, 1)); color: var(--fg-3); line-height: 1.45; }
+.cm-gauges { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.cm-g { background: var(--surface); padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; cursor: help; }
+.cm-g span { font-size: calc(11.5px * var(--fs, 1)); color: var(--fg-3); }
+.cm-g b { font-family: var(--mono); font-size: calc(17px * var(--fs, 1)); font-weight: 600; }
+.cm-id { display: flex; flex-direction: column; gap: 8px; }
+.cm-id-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); }
+.cm-news { display: flex; flex-direction: column; gap: 2px; }
+.cm-n { display: flex; flex-direction: column; gap: 4px; padding: 9px 10px; border-radius: 8px; color: var(--fg); text-decoration: none; }
+.cm-n:hover { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.cm-nt { font-size: calc(12.5px * var(--fs, 1)); line-height: 1.4; }
+.cm-nm { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.chip-mkt, .chip-tone { font: 600 calc(10px * var(--fs, 1)) var(--mono); padding: 1px 6px; border-radius: 4px; background: var(--raised); color: var(--fg-2); }
+.chip-mkt.indonesia { color: #ff8f8b; } .chip-mkt.em { color: var(--c4); }
+.chip-tone.pressure { color: var(--down); } .chip-tone.relief { color: var(--up); }
+@media (max-width: 1100px) { .wb-grid, .cm-grid, .wb-perf { grid-template-columns: minmax(0, 1fr); } .cm-top { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 760px) { .wb-tiles { grid-template-columns: 1fr 1fr; } .cm-gauges { grid-template-columns: 1fr 1fr; } .pbar { width: 64px; } .pp { min-width: 0; } .rng { width: 60px; } }
