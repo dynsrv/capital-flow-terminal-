@@ -1,5 +1,5 @@
 {
-  "crons": [ { "path": "/api/cron/refresh", "schedule": "0 22 * * *" } ],
+  "crons": [ { "path": "/api/cron/refresh", "schedule": "0 22 * * *" }, { "path": "/api/cron/anomalies", "schedule": "15 9 * * *" } ],
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/index" }
   ],

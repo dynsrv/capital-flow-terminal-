@@ -13,6 +13,7 @@ import * as I from './insights.js';
 import { testCredential } from './keytest.js';
 import { preCrash } from './precrash.js';
 import { recentEpisodes } from './recent.js';
+import { currentAnomalies, scanAnomalies, scheduledScan, scanLog, anomalyMode, nextRun } from './anomscan.js';
 import { getReading, refreshReading, scheduledRefresh, listModels, listReadings } from './reading.js';
 import { fetchNews, curateNews, getCurated, SOURCES as NEWS_SOURCES } from './news.js';
 import { getChannels, saveChannels, resetChannels, hlsRelay, DEFAULT_CHANNELS } from './tv.js';
@@ -99,7 +100,7 @@ async function handleApi(request, env, url) {
 
     if (p === '/flows') return wrap(await flows(ctx));
 
-    if (p === '/intel/anomalies') { const an = await A.anomalies(ctx, parseIds(url, ASSETS.filter(a => a.cls !== 'macro' || a.id === 'VIX').map(a => a.id))); return wrap(url.searchParams.get('analysis') === '0' ? an : await I.annotateAnomalies(ctx, an)); }
+    if (p === '/intel/anomalies') return wrap(await currentAnomalies(ctx, parseIds(url, null), url.searchParams.get('analysis') !== '0'));
     if (p === '/intel/patterns') return wrap(await A.patterns(ctx));
     if (p === '/intel/precrash') return wrap(await preCrash(ctx));
     if (p === '/intel/recent') return wrap(await recentEpisodes(ctx));
@@ -126,11 +127,16 @@ async function handleApi(request, env, url) {
       let body = {}; try { body = await request.json(); } catch (e) {}
       return streamJson(() => intelligence(ctx, { ids: body.ids, question: body.question, model: body.model }), config.demoMode);
     }
+    if (p === '/cron/anomalies') {
+      const secret = env.CRON_SECRET; const auth = request.headers.get('authorization') || '';
+      if (!(secret && auth === `Bearer ${secret}`) && !checkAdminAuth(request, env).ok) return error('Unauthorised', 401);
+      return streamJson(async () => ({ anomalies: await scheduledScan(ctx, 'asia') }), config.demoMode);
+    }
     if (p === '/cron/refresh') {
       const secret = env.CRON_SECRET; const auth = request.headers.get('authorization') || '';
       const okCron = secret && auth === `Bearer ${secret}`; const okAdmin = checkAdminAuth(request, env).ok;
       if (!okCron && !okAdmin) return error('Unauthorised', 401);
-      return streamJson(async () => ({ usage: await U.compact(env.__store).catch(e => ({ error: e.message })), histories: await persistHistories(ctx).catch(e => ({ error: e.message })), snapshot: await dailySnapshot(ctx).catch(e => ({ error: e.message })), ai: await scheduledRefresh(ctx).catch(e => ({ error: e.message })), realtimeScan: rtSettings(config).enabled ? await scanPlans(ctx).then(x => x.summary).catch(e => ({ error: e.message })) : { skipped: 'real-time off' }, news: (config.keys.NEWS_AI_CURATION || 'off') === 'daily' ? await curateNews(ctx).then(c => ({ curated: c.picks.length })).catch(e => ({ error: e.message })) : { skipped: 'news curation not scheduled' } }), config.demoMode);
+      return streamJson(async () => ({ anomalies: await scheduledScan(ctx, 'us').catch(e => ({ error: e.message })), usage: await U.compact(env.__store).catch(e => ({ error: e.message })), histories: await persistHistories(ctx).catch(e => ({ error: e.message })), snapshot: await dailySnapshot(ctx).catch(e => ({ error: e.message })), ai: await scheduledRefresh(ctx).catch(e => ({ error: e.message })), realtimeScan: rtSettings(config).enabled ? await scanPlans(ctx).then(x => x.summary).catch(e => ({ error: e.message })) : { skipped: 'real-time off' }, news: (config.keys.NEWS_AI_CURATION || 'off') === 'daily' ? await curateNews(ctx).then(c => ({ curated: c.picks.length })).catch(e => ({ error: e.message })) : { skipped: 'news curation not scheduled' } }), config.demoMode);
     }
 
     if (p === '/shock/betas') {
@@ -158,6 +164,8 @@ async function handleApi(request, env, url) {
       if (p === '/admin/tv' && request.method === 'GET') return wrap({ ...(await getChannels(ctx)), defaults: DEFAULT_CHANNELS });
       if (p === '/admin/tv' && request.method === 'POST') { const body = await request.json().catch(() => ({})); return wrap(body.reset ? await resetChannels(ctx) : await saveChannels(ctx, body.channels)); }
       if (p === '/admin/realtime' && request.method === 'POST') { const body = await request.json().catch(() => ({})); const patch = {}; if (Array.isArray(body.priority)) patch.priority = body.priority; if (body.overrides) patch.overrides = body.overrides; return wrap({ routing: await saveRouting(ctx, patch) }); }
+      if (p === '/admin/anomalies' && request.method === 'GET') { const mode = anomalyMode(config); const log = await scanLog(ctx); return wrap({ mode, nextScan: nextRun(mode), log: log.slice(0, 20) }); }
+      if (p === '/admin/anomalies/scan' && request.method === 'POST') return streamJson(async () => { const d = await scanAnomalies(ctx, 'admin'); return { scannedAt: d.scannedAt, count: d.items.length, changes: d.changes }; }, config.demoMode);
       if (p === '/admin/members' && request.method === 'GET') return wrap({ members: await listMembers(env), liveOn: rtSettings(config).enabled });
       if (p === '/admin/members' && request.method === 'POST') { const body = await request.json().catch(() => ({})); try { return wrap({ members: await manageMembers(env, body) }); } catch (e) { return error(e.message, e.status || 400); } }
       if (p === '/admin/usage' && request.method === 'GET') return json({ ok: true, ...(await U.report(env.__store, Math.max(1, Math.min(31, Number(url.searchParams.get('days')) || 7)))) }, 200, { 'cache-control': 'no-store' });

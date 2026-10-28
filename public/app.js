@@ -666,7 +666,7 @@
 
     // Signals & anomalies
     renderSignalList('#ov-signals', sig ? sig.signals.slice(0, 8) : null, (id) => { state.risk.trendId = id; show('risk'); }, null, true);
-    $('#ov-anom').innerHTML = an && an.items.length ? an.items.slice(0, 6).map((x, i) => { const five = Math.abs(x.z5) > Math.abs(x.z1); const mvv = five ? x.move5d : x.move1d; return `<div class="li ${i === 0 ? 'open' : ''}" data-id="${x.id}"><span class="ico ${mvv > 0 ? 'up' : 'down'}">${ic(mvv > 0 ? 'up' : 'down')}</span><span class="ti">${esc(x.name)}<span>${x.id}</span></span><span class="de">${five ? '5-day' : '1-day'} ${x.unit === 'bp' ? Math.round(mvv) + ' bp' : fmt.pct(mvv)} · ${Math.abs(five ? x.z5 : x.z1).toFixed(1)}σ · ${x.date.slice(5)}</span><span class="rt"><span class="badge ${x.severity === 'extreme' ? 'bad' : x.severity === 'high' ? 'mid' : ''}">${x.severity}</span>${ic('down', 'chev')}</span><div class="li-x">${anomalyReading(x)}<div class="row-actions" style="margin-top:10px"><button class="btn ghost" data-open="${x.id}">${ic('line')}Chart</button></div></div></div>`; }).join('') : emptyState(an ? 'No moves beyond 2σ in the latest observations.' : 'Anomaly scan unavailable.', 'target');
+    $('#ov-anom').innerHTML = an && an.items.length ? an.items.slice(0, 6).map((x, i) => { const five = Math.abs(x.z5) > Math.abs(x.z1); const mvv = five ? x.move5d : x.move1d; return `<div class="li ${i === 0 ? 'open' : ''}" data-id="${x.id}"><span class="ico ${mvv > 0 ? 'up' : 'down'}">${ic(mvv > 0 ? 'up' : 'down')}</span><span class="ti">${esc(x.name)}<span>${x.id}</span>${an.changes && an.changes.added.includes(x.id) && an.changes.previousScan ? '<em class="an-new">new</em>' : an.changes && an.changes.escalated.includes(x.id) ? '<em class="an-new up">stronger</em>' : ''}</span><span class="de">${five ? '5-day' : '1-day'} ${x.unit === 'bp' ? Math.round(mvv) + ' bp' : fmt.pct(mvv)} · ${Math.abs(five ? x.z5 : x.z1).toFixed(1)}σ · ${x.date.slice(5)}</span><span class="rt"><span class="badge ${x.severity === 'extreme' ? 'bad' : x.severity === 'high' ? 'mid' : ''}">${x.severity}</span>${ic('down', 'chev')}</span><div class="li-x">${anomalyReading(x)}<div class="row-actions" style="margin-top:10px"><button class="btn ghost" data-open="${x.id}">${ic('line')}Chart</button></div></div></div>`; }).join('') : emptyState(an ? 'No moves beyond 2σ in the latest observations.' : 'Anomaly scan unavailable.', 'target');
     $('#ov-anom').onclick = e => { if (e.target.closest('button')) return; const t = e.target.closest('.li'); if (t) t.classList.toggle('open'); };
     $('#ov-risks').innerHTML = hl && hl.items.length ? highlightItems(hl.items, 4) : emptyState(hl ? 'No risk flags right now.' : 'Risk scan unavailable.', 'risk');
 
@@ -930,7 +930,7 @@
     const v = $('#view-intel'); v.innerHTML = loading('Scanning for anomalies and pattern resemblance…');
     const [an, pat, pre, rec] = await Promise.all([api('/intel/anomalies'), api('/intel/patterns'), api('/intel/precrash').catch(e => ({ error: e.message })), api('/intel/recent').catch(e => ({ error: e.message }))]);
     v.innerHTML = `
-      ${card({ icon: 'target', title: 'Detected anomalies', sub: `${an.items.length} instrument${an.items.length === 1 ? '' : 's'} flagged, each with a plain-language reading`, actions: '<span class="badge measured">measured</span><span class="badge estimate">rules-based reading</span>', body: '<div id="anom-list" style="display:flex;flex-direction:column;gap:12px"></div>', foot: esc(an.method) })}
+      ${card({ icon: 'target', title: 'Detected anomalies', sub: `${an.items.length} instrument${an.items.length === 1 ? '' : 's'} flagged, each with a plain-language reading`, actions: `<span class="xs muted an-meta">${anomMeta(an)}</span><span class="badge measured">measured</span><span class="badge estimate">rules-based reading</span>`, body: '<div id="anom-list" style="display:flex;flex-direction:column;gap:12px"></div>', foot: esc(an.method) })}
       ${card({ icon: 'history', title: 'Before the peak: pre-crash conditions', sub: 'What was in place before the 1987, 2000 and 2008 peaks, and which of those conditions are present now', actions: '<span class="badge estimate">heuristic</span>', body: '<div id="pre-body" style="display:flex;flex-direction:column;gap:16px"></div>', foot: '<span id="pre-method"></span>' })}
       ${card({ icon: 'clock', title: '2020–2023: COVID crash and the inflation bear market', sub: 'Before the peak, during the fall and the impact, with today\'s data tested against each phase', actions: '<span class="badge measured">measured now</span><span class="badge estimate">documented history</span>', body: '<div id="rc-body"></div>', foot: '<span id="rc-method"></span>', id: 'rc-card' })}
       ${card({ icon: 'target', title: 'During the crash: signatures', sub: 'What each crash looked like once it had begun. Lagging by nature; shown for completeness', actions: '<span class="badge estimate">heuristic</span>', body: '<div class="grid g-auto" id="pattern-body"></div>', foot: esc(pat.method) })}
@@ -952,6 +952,14 @@
     $('#ai-run').onclick = () => runAI({ model: $('#ai-model').value || undefined, question: $('#ai-q').value || undefined });
     loadReading();
   }
+  const anomMeta = (an) => {
+    const sched = { daily: 'daily scan, 22:00 UTC', 'twice-daily': 'scans at 09:15 and 22:00 UTC' }[an.mode];
+    if (!sched) return `Live · computed ${fmt.ago(an.scannedAt || an.asOf)}`;
+    if (an.pending) return `Live until the first scheduled scan (${sched})`;
+    const cl = an.changes && an.changes.cleared.length ? ` · cleared since previous: ${an.changes.cleared.join(', ')}` : '';
+    return `Scanned ${fmt.time(an.scannedAt)} (${fmt.ago(an.scannedAt)}, ${an.trigger === 'admin' ? 'by admin' : 'scheduled'}) · ${sched}${an.nextScan ? ` · next ${fmt.time(an.nextScan).slice(11)}` : ''}${cl}`;
+  };
+
   /* ───────── 2020–2023 episodes: before / during / impact ───────── */
   const condRowHtml = (c) => `<div class="cond ${c.hit === null ? 'na' : c.hit ? 'hit' : 'miss'}"><i></i><div class="cl"><b>${esc(c.label)}${c.basis ? ` <span class="badge estimate">${c.basis}</span>` : ''}</b><span class="then">Then: ${esc(c.then)}</span>${c.note ? `<span class="then">${esc(c.note)}</span>` : ''}</div><div class="cn">${esc(c.now)}</div></div>`;
   const rcState = {};
@@ -1046,7 +1054,7 @@
   function renderAdmin() {
     const v = $('#view-admin'); const a = state.admin;
     const hdr = () => ({ authorization: 'Bearer ' + a.token, 'content-type': 'application/json' });
-    const SECS = [['home','home','Overview'],['keys','key','API keys'],['members','users','Members'],['realtime','pulse','Real-time'],['ai','intel','AI & news'],['usage','db','Usage & logs'],['tv','tv','Live TV'],['appearance','book','Appearance'],['data','layers','Data & storage']];
+    const SECS = [['home','home','Overview'],['keys','key','API keys'],['members','users','Members'],['realtime','pulse','Real-time'],['ai','intel','Intelligence'],['usage','db','Usage & logs'],['tv','tv','Live TV'],['appearance','book','Appearance'],['data','layers','Data & storage']];
     let sec = (() => { try { return sessionStorage.getItem('cft:admsec') || 'home'; } catch (e) { return 'home'; } })(); if (!SECS.some(x => x[0] === sec)) sec = 'home';
     v.innerHTML = `<div class="adm-lock" id="adm-lockscreen"><form class="adm-lock-card" id="adm-lock-form" autocomplete="off">
         <div class="pin-ic">${ic('lock')}</div><h2>Admin console</h2><p class="dim sm">Enter the admin token to manage keys, members, real-time data and usage.</p>
@@ -1060,13 +1068,13 @@
           <section class="adm-sec" data-sec="keys">${card({ icon: 'key', title: 'API credentials', sub: 'Stored server-side, encrypted; values are never shown in full', body: '<div id="adm-fields"><div class="loading"><span class="spin"></span>Loading…</div></div>' })}</section>
           <section class="adm-sec" data-sec="members">${card({ icon: 'users', title: 'Members', sub: 'People who sign in with a PIN for live prices and every TV channel', body: '<div id="adm-members"></div>' })}</section>
           <section class="adm-sec" data-sec="realtime">${card({ icon: 'pulse', title: 'Real-time data routing', sub: 'Which provider prices each instrument. Switch real-time on and add keys in the Real-time group of the credentials panel', body: '<div id="adm-rt"><p class="dim">Unlock to view.</p></div>' })}</section>
-          <section class="adm-sec" data-sec="ai"><div class="adm-2">${card({ icon: 'intel', title: 'AI reading', sub: 'Generate or schedule the market reading shown on the Intelligence page', body: '<div id="adm-ai"><p class="dim">Unlock to manage.</p></div>' })}${card({ icon: 'news', title: 'News curation', sub: 'Optional: let a model rank and annotate the sidebar headlines', body: '<div id="adm-news"><p class="dim">Unlock to manage.</p></div>' })}</div></section>
+          <section class="adm-sec" data-sec="ai">${card({ icon: 'target', title: 'Anomaly scan', sub: 'How often Detected anomalies is refreshed, and what changed between scans', body: '<div id="adm-anom"></div>' })}<div class="adm-2">${card({ icon: 'intel', title: 'AI reading', sub: 'Generate or schedule the market reading shown on the Intelligence page', body: '<div id="adm-ai"><p class="dim">Unlock to manage.</p></div>' })}${card({ icon: 'news', title: 'News curation', sub: 'Optional: let a model rank and annotate the sidebar headlines', body: '<div id="adm-news"><p class="dim">Unlock to manage.</p></div>' })}</div></section>
           <section class="adm-sec" data-sec="usage">${card({ icon: 'db', title: 'Usage & API logs', sub: 'Every upstream API call, model token and storage operation, with an estimated cost', body: '<div id="adm-usage"><p class="dim">Unlock to view.</p></div>', cls: 'us-card' })}</section>
           <section class="adm-sec" data-sec="tv">${card({ icon: 'tv', title: 'Live TV channels', sub: 'Broadcaster HLS streams offered in the sidebar player', body: '<div id="adm-tv"><p class="dim">Unlock to edit.</p></div>' })}</section>
           <section class="adm-sec" data-sec="appearance">${card({ icon: 'book', title: 'Appearance', sub: 'Font and text size for everyone who opens the terminal', body: '<div id="adm-ui"><p class="dim">Unlock to change.</p></div>' })}</section>
           <section class="adm-sec" data-sec="data"><div class="adm-2">${card({ icon: 'db', title: 'Storage & cache', sub: 'Health of each delayed price source right now', body: '<div id="adm-status"><p class="dim">Unlock to view.</p></div>' })}${card({ icon: 'info', title: 'How data is handled', sub: 'Sources, keys, cache lifetimes and demo mode', body: '<div class="sm dim" style="display:flex;flex-direction:column;gap:8px"><p><b>No key needed:</b> Yahoo Finance (delayed), FRED, CoinGecko public, gold-api.com.</p><p><b>Optional:</b> FRED, EIA, CoinGecko (longer history), Anthropic (AI explanations), Exa or Parallel (news citations).</p><p><b>Cache:</b> quotes 60 s, histories 15 min, macro 1 h. If a source fails, the last value is served and flagged stale.</p><p><b>Demo mode</b> shows a permanent banner and every badge reads demo.</p></div>' })}</div>${card({ icon: 'layers', title: 'Market-size reference data', sub: 'Published aggregates behind the Overview treemap', body: '<div id="adm-sizes"><p class="dim">Unlock to edit.</p></div>', foot: 'Update when a newer SIFMA Fact Book or World Gold Council figure is published, and keep the source and as-of date.' })}</section>
         </div></div>`;
-    const lazy = { realtime: () => renderAdminRealtime(hdr), usage: () => renderAdminUsage(hdr), members: () => renderAdminMembers(hdr), home: () => renderAdminHome(hdr) };
+    const lazy = { ai: () => renderAdminAnomalies(hdr), realtime: () => renderAdminRealtime(hdr), usage: () => renderAdminUsage(hdr), members: () => renderAdminMembers(hdr), home: () => renderAdminHome(hdr) };
     const opened = new Set();
     const openSec = (k) => { sec = k; try { sessionStorage.setItem('cft:admsec', k); } catch (e) {} $$('#adm-nav [data-sec]').forEach(b => b.classList.toggle('active', b.dataset.sec === k)); $$('.adm-sec').forEach(x => x.classList.toggle('active', x.dataset.sec === k)); const nb = $(`#adm-nav [data-sec="${k}"]`); if (nb && nb.scrollIntoView) nb.scrollIntoView({ block: 'nearest', inline: 'nearest' }); window.scrollTo({ top: 0 }); if (v.classList.contains('unlocked') && lazy[k] && (!opened.has(k) || k === 'home')) { opened.add(k); lazy[k](); } };
     state.admin.openSec = openSec;
@@ -1080,7 +1088,7 @@
         const [k, st, sz] = await Promise.all([api('/admin/keys', { headers: hdr() }), api('/admin/status', { headers: hdr() }), api('/admin/sizes', { headers: hdr() })]);
         try { sessionStorage.setItem('cft:admin', a.token); } catch (e) {}
         v.classList.add('unlocked'); a.status = st; a.keys = k; syncRole(); startRt();
-        const groups = {}; k.fields.filter(f => f.group !== 'Appearance').forEach(f => (groups[f.group] ||= []).push(f));
+        const groups = {}; k.fields.filter(f => f.group !== 'Appearance' && f.key !== 'ANOMALY_SCHEDULE').forEach(f => (groups[f.group] ||= []).push(f));
         const gIcon = { Appearance: 'book', AI: 'intel', Search: 'search', Data: 'db', 'Real-time': 'pulse' };
         $('#adm-fields').innerHTML = Object.entries(groups).map(([g, fs]) => `<div class="nav-label" style="padding:18px 0 4px;display:flex;align-items:center;gap:6px">${ic(gIcon[g] || 'key')}${esc(g)}</div>` + fs.map(f => {
           const status = f.configured ? `<span class="badge measured">${f.secret === false ? esc(f.value) : 'set'}${f.fromEnv ? ' · env' : ''}</span>` : '<span class="badge">not set</span>';
@@ -1298,6 +1306,26 @@
     openProviderSockets();
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden && rt.timer) pollRt(); });
+
+  /* ───────── Admin: anomaly scan schedule ───────── */
+  async function renderAdminAnomalies(hdr) {
+    const box = $('#adm-anom'); if (!box) return;
+    box.innerHTML = `<div class="loading"><span class="spin"></span>Loading…</div>`;
+    let r; try { r = await api('/admin/anomalies', { headers: hdr() }); } catch (e) { box.innerHTML = errorBox(e.message); return; }
+    const MODES = [['live', 'Live', 'Computed when someone opens the page (cached 5 min). Always current; no history of what changed.'], ['daily', 'Daily', 'One stored scan after the US close (22:00 UTC). Everyone sees the same list until the next scan, with new and cleared anomalies marked.'], ['twice-daily', 'Twice daily', 'Adds a 09:15 UTC scan after the Tokyo, Hong Kong and Jakarta closes.']];
+    const last = r.log[0];
+    const chips = (ids, cls) => ids.length ? ids.map(i => `<span class="an-chip ${cls}">${esc(i)}</span>`).join('') : '<span class="muted">none</span>';
+    box.innerHTML = `<div class="anx">
+      <div class="anx-modes" role="radiogroup">${MODES.map(([k, l, d]) => `<label class="anx-mode ${r.mode === k ? 'on' : ''}"><input type="radio" name="anx-mode" value="${k}" ${r.mode === k ? 'checked' : ''}><b>${l}</b><span>${d}</span></label>`).join('')}</div>
+      <div class="row-actions"><button class="btn" id="anx-save">Save schedule</button><button class="btn ghost" id="anx-run">${ic('refresh')}Scan now</button><span class="xs muted" style="align-self:center">${r.nextScan ? `Next scheduled scan ${esc(fmt.time(r.nextScan))}` : 'No schedule: the list is computed live.'}</span></div>
+      <div class="kv"><dt>Last stored scan</dt><dd>${last ? `${esc(fmt.time(last.at))} · ${last.trigger === 'admin' ? 'by admin' : 'scheduled'} · ${last.count} flagged` : 'none yet'}</dd><dt>New in that scan</dt><dd>${last ? chips(last.added, 'add') : '—'}</dd><dt>Cleared</dt><dd>${last ? chips(last.cleared, 'clr') : '—'}</dd><dt>Stronger</dt><dd>${last ? chips(last.escalated, 'esc') : '—'}</dd></div>
+      ${r.log.length ? `<div class="tbl"><table class="t"><thead><tr><th>Scan (UTC)</th><th>Trigger</th><th class="num">Flagged</th><th>New</th><th>Cleared</th><th>Top</th></tr></thead><tbody>${r.log.map(x => `<tr><td class="mono nowrap">${esc(fmt.time(x.at))}</td><td class="xs">${x.trigger === 'admin' ? 'admin' : 'schedule'}</td><td class="num mono">${x.count}</td><td class="xs">${x.added.join(', ') || '—'}</td><td class="xs muted">${x.cleared.join(', ') || '—'}</td><td class="xs muted">${x.items.slice(0, 4).map(i => `${esc(i.id)} ${Math.max(Math.abs(i.z1), Math.abs(i.z5)).toFixed(1)}σ`).join(' · ')}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      <p class="xs muted">Detection: for each instrument, the latest 1-day and 5-day change is compared with its own daily changes over about the last year (log returns for prices, basis-point changes for yields and spreads). A move of 2σ or more, or 10-day volatility at twice its 1-year level, is flagged; 3σ is high and 4σ extreme. Scans use daily closes, so a scan reads the latest close (and today's price while markets are open). Each stored scan is two storage writes.</p>
+    </div>`;
+    $$('#adm-anom input[name="anx-mode"]').forEach(i => i.onchange = () => $$('#adm-anom .anx-mode').forEach(l => l.classList.toggle('on', $('input', l).checked)));
+    $('#anx-save').onclick = async () => { const v = $('#adm-anom input[name="anx-mode"]:checked').value; try { await api('/admin/keys', { method: 'POST', headers: hdr(), body: JSON.stringify({ ANOMALY_SCHEDULE: v }) }); toast(v === 'live' ? 'Anomalies are live' : 'Schedule saved'); if (v !== 'live' && !r.log.length) await api('/admin/anomalies/scan', { method: 'POST', headers: hdr() }); renderAdminAnomalies(hdr); } catch (e) { toast(e.message); } };
+    $('#anx-run').onclick = async (e) => { const b = e.currentTarget; b.disabled = true; b.innerHTML = '<span class="spin" style="width:12px;height:12px"></span>Scanning…'; try { const x = await api('/admin/anomalies/scan', { method: 'POST', headers: hdr() }); toast(`${x.count} flagged · ${x.changes.added.length} new · ${x.changes.cleared.length} cleared`); renderAdminAnomalies(hdr); } catch (err) { toast(err.message); b.disabled = false; b.textContent = 'Scan now'; } };
+  }
 
   /* ───────── Admin: overview ───────── */
   async function renderAdminHome(hdr) {

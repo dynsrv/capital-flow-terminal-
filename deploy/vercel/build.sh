@@ -12,9 +12,11 @@ npx --yes esbuild@0.24.2 src_tmp/api/index.js --bundle --format=esm --platform=b
 cat > "$OUT/functions/api.func/.vc-config.json" <<'JSON'
 { "runtime": "edge", "entrypoint": "index.js" }
 JSON
-cat > "$OUT/config.json" <<'JSON'
-{ "version": 3,
-  "crons": [ { "path": "/api/cron/refresh", "schedule": "0 22 * * *" } ],
+# Cron schedules live in the repo (deploy/vercel/crons.json), so changing them needs only a push and a redeploy.
+CRONS='[ { "path": "/api/cron/refresh", "schedule": "0 22 * * *" } ]'
+if [ -f src_tmp/deploy/vercel/crons.json ]; then CRONS="$(tr -d '\n' < src_tmp/deploy/vercel/crons.json)"; fi
+printf '{ "version": 3,\n  "crons": %s,\n' "$CRONS" > "$OUT/config.json"
+cat >> "$OUT/config.json" <<'JSON'
   "routes": [
     { "src": "^/api(?:/.*)?$", "dest": "/api" },
     { "handle": "filesystem" },

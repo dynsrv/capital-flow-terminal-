@@ -1356,3 +1356,18 @@ body.admin-mode #help-btn { display: none !important; }
 .rc-yr { white-space: nowrap; }
 .rc-dates { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 3px; }
 .rc-dates span { white-space: nowrap; }
+
+/* ───────── anomaly scan ───────── */
+.an-meta { max-width: 520px; text-align: right; line-height: 1.4; }
+.an-new { font-style: normal; margin-left: 8px; padding: 1px 6px; border-radius: 5px; font: 600 calc(10.5px * var(--fs, 1)) var(--mono); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 10%, transparent); vertical-align: middle; }
+.an-new.up { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); background: color-mix(in srgb, var(--warn) 10%, transparent); }
+.anx { display: flex; flex-direction: column; gap: 16px; }
+.anx-modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.anx-mode { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 12px 14px 12px 40px; border: 1px solid var(--line-2); border-radius: 10px; background: var(--surface-2); cursor: pointer; }
+.anx-mode input { position: absolute; left: 14px; top: 14px; accent-color: #fb8b1e; width: 15px; height: 15px; }
+.anx-mode b { font-size: calc(13px * var(--fs, 1)); }
+.anx-mode span { font-size: calc(12px * var(--fs, 1)); color: var(--fg-3); line-height: 1.45; }
+.anx-mode.on { border-color: #fb8b1e; background: color-mix(in srgb, #fb8b1e 7%, var(--surface-2)); }
+.an-chip { display: inline-block; margin: 0 4px 2px 0; padding: 1px 7px; border-radius: 5px; font: 500 calc(11px * var(--fs, 1)) var(--mono); background: var(--surface-2); border: 1px solid var(--line-2); }
+.an-chip.add { color: var(--accent); } .an-chip.clr { color: var(--fg-3); } .an-chip.esc { color: var(--warn); }
+@media (max-width: 900px) { .anx-modes { grid-template-columns: minmax(0, 1fr); } .an-meta { text-align: left; } }

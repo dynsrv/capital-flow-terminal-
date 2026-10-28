@@ -107,6 +107,18 @@ operations and our own function invocations are counted too, as are live-TV rela
 - **Settings:** *Usage meter* (on/off) and *Usage save interval* in the credentials panel (group Usage).
 - Admin keys are now read from storage at most once every 30 s per instance instead of on every request.
 
+## Detected anomalies: how and when
+
+Each instrument's latest 1-day and 5-day change is compared with its own daily changes over roughly the last year (log
+returns for prices, basis-point changes for yields and spreads). A z-score of 2 or more on either horizon, or 10-day realised
+volatility at twice its 1-year level, flags it; 3σ is *high*, 4σ *extreme*. Each flag gets a rules-based reading (rarity,
+trend, peers, what to watch).
+
+Admin → Intelligence → **Anomaly scan** (`ANOMALY_SCHEDULE`): *live* (computed on page view, cached 5 min), *daily*
+(stored scan at 22:00 UTC with the nightly job) or *twice-daily* (also 09:15 UTC via `/api/cron/anomalies`). Scheduled
+scans mark anomalies that are new or stronger since the previous scan, list cleared ones, and keep the last 60 scans
+(`anomalies/latest`, `anomalies/log`). *Scan now* runs one at any time. Cron schedules live in `deploy/vercel/crons.json`.
+
 ## 2020–2023 episodes (Intelligence)
 
 A card for the COVID crash (Feb–Mar 2020) and the inflation bear market (2022, with the March 2023 bank stress), each in
