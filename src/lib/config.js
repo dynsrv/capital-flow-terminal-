@@ -28,17 +28,20 @@ export const CREDENTIAL_FIELDS = [
   { key: 'FINNHUB_API_KEY', label: 'Finnhub API key', group: 'Real-time', help: 'Free plan: real-time US ETF quotes, about 60 calls/min, personal non-commercial use.', test: true },
   { key: 'TWELVEDATA_API_KEY', label: 'Twelve Data API key', group: 'Real-time', help: 'FX (EUR, JPY, GBP, CNY, IDR), gold, silver and crypto. Free tier: 8 credits/min and internal non-display use only; Grow ($29/mo) or above for a displayed dashboard.', test: true },
   { key: 'TWELVEDATA_CREDITS', label: 'Twelve Data credits per minute', group: 'Real-time', help: 'Your plan’s per-minute credit allowance. The update interval for Twelve Data is stretched so it never exceeds it (free = 8, Grow = 55+).', secret: false, placeholder: '8', options: ['8', '55', '144', '377', '610'] },
+  { key: 'USAGE_METER', label: 'Usage meter', group: 'Usage', help: 'Counts every upstream API call, model tokens and storage operation, with an estimated cost (Admin → Usage & API logs). off stops counting and saving.', secret: false, placeholder: 'on', options: ['on', 'off'] },
+  { key: 'USAGE_FLUSH_MIN', label: 'Usage save interval (minutes)', group: 'Usage', help: 'How often each server instance saves its counts to storage, only when something new happened. Each save is one Blob write (Hobby includes 2,000 a month); model calls save on the next request. Default 60.', secret: false, placeholder: '60' },
 ];
 
 const ADMIN_DOC = 'admin/keys';
 export async function loadAdminKeys(env) {
-  if (env.__store) { try { return (await env.__store.getJSON(ADMIN_DOC, { secure: true })) || {}; } catch (e) { /* fall back */ } }
+  if (env.__store) { try { return (await env.__store.getJSON(ADMIN_DOC, { secure: true, maxAgeMs: 30e3 })) || {}; } catch (e) { /* fall back */ } }
   if (!env.CACHE || typeof env.CACHE.get !== 'function') return {};
   try { return (await env.CACHE.get('admin:keys', 'json')) || {}; } catch (e) { return {}; }
 }
 
 export async function saveAdminKeys(env, updates) {
-  const current = await loadAdminKeys(env);
+  // read the stored document itself (not the 30-second memo) so a save never overwrites a newer one
+  let current; try { current = env.__store ? (await env.__store.getJSON(ADMIN_DOC, { secure: true })) || {} : await loadAdminKeys(env); } catch (e) { current = await loadAdminKeys(env); }
   for (const [k, v] of Object.entries(updates)) {
     if (!CREDENTIAL_FIELDS.find(f => f.key === k)) continue;
     if (v === null || v === '') delete current[k]; else current[k] = String(v).trim();

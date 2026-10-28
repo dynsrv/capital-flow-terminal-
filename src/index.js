@@ -15,6 +15,7 @@ import { preCrash } from './precrash.js';
 import { getReading, refreshReading, scheduledRefresh, listModels, listReadings } from './reading.js';
 import { fetchNews, curateNews, getCurated, SOURCES as NEWS_SOURCES } from './news.js';
 import { getChannels, saveChannels, resetChannels, hlsRelay, DEFAULT_CHANNELS } from './tv.js';
+import * as U from './lib/usage.js';
 import { publicConfig, rtQuotes, rtSettings, PROVIDERS, RT_MAP, loadRouting, saveRouting, routeFor, scanPlans, socketsFor } from './realtime.js';
 
 // CORS so the published artifact (or any front-end) can call this API.
@@ -46,6 +47,7 @@ async function handleApi(request, env, url) {
   withStore(env);
   const config = await getConfig(env);
   const ctx = ctxFor(env, config);
+  U.configure(config.keys); U.loadPrices(env.__store).catch(() => {});
   const p = url.pathname.replace(/^\/api/, '');
   const started = Date.now();
   const wrap = (data) => json({ ok: true, demoMode: config.demoMode, generatedAt: new Date().toISOString(), ms: Date.now() - started, ...data }, 200, cdnHeaders(p, request.method));
@@ -106,7 +108,7 @@ async function handleApi(request, env, url) {
       const secret = env.CRON_SECRET; const auth = request.headers.get('authorization') || '';
       const okCron = secret && auth === `Bearer ${secret}`; const okAdmin = checkAdminAuth(request, env).ok;
       if (!okCron && !okAdmin) return error('Unauthorised', 401);
-      const out = { histories: await persistHistories(ctx).catch(e => ({ error: e.message })), snapshot: await dailySnapshot(ctx).catch(e => ({ error: e.message })), ai: await scheduledRefresh(ctx).catch(e => ({ error: e.message })), realtimeScan: rtSettings(config).enabled ? await scanPlans(ctx).then(x => x.summary).catch(e => ({ error: e.message })) : { skipped: 'real-time off' }, news: (config.keys.NEWS_AI_CURATION || 'off') === 'daily' ? await curateNews(ctx).then(c => ({ curated: c.picks.length })).catch(e => ({ error: e.message })) : { skipped: 'news curation not scheduled' } };
+      const out = { usage: await U.compact(env.__store).catch(e => ({ error: e.message })), histories: await persistHistories(ctx).catch(e => ({ error: e.message })), snapshot: await dailySnapshot(ctx).catch(e => ({ error: e.message })), ai: await scheduledRefresh(ctx).catch(e => ({ error: e.message })), realtimeScan: rtSettings(config).enabled ? await scanPlans(ctx).then(x => x.summary).catch(e => ({ error: e.message })) : { skipped: 'real-time off' }, news: (config.keys.NEWS_AI_CURATION || 'off') === 'daily' ? await curateNews(ctx).then(c => ({ curated: c.picks.length })).catch(e => ({ error: e.message })) : { skipped: 'news curation not scheduled' } };
       return wrap(out);
     }
 
@@ -135,6 +137,9 @@ async function handleApi(request, env, url) {
       if (p === '/admin/tv' && request.method === 'GET') return wrap({ ...(await getChannels(ctx)), defaults: DEFAULT_CHANNELS });
       if (p === '/admin/tv' && request.method === 'POST') { const body = await request.json().catch(() => ({})); return wrap(body.reset ? await resetChannels(ctx) : await saveChannels(ctx, body.channels)); }
       if (p === '/admin/realtime' && request.method === 'POST') { const body = await request.json().catch(() => ({})); const patch = {}; if (Array.isArray(body.priority)) patch.priority = body.priority; if (body.overrides) patch.overrides = body.overrides; return wrap({ routing: await saveRouting(ctx, patch) }); }
+      if (p === '/admin/usage' && request.method === 'GET') return json({ ok: true, ...(await U.report(env.__store, Math.max(1, Math.min(31, Number(url.searchParams.get('days')) || 7)))) }, 200, { 'cache-control': 'no-store' });
+      if (p === '/admin/usage/prices' && request.method === 'POST') { const body = await request.json().catch(() => ({})); return wrap({ prices: await U.savePrices(env.__store, body) }); }
+      if (p === '/admin/usage/flush' && request.method === 'POST') return wrap({ flush: await U.flush(env.__store, { force: true }), compact: await U.compact(env.__store).catch(e => ({ error: e.message })) });
       if (p === '/admin/rt-sockets') return json({ ok: true, sockets: await socketsFor(ctx, 'admin') }, 200, { 'cache-control': 'no-store' });
       if (p === '/admin/realtime/scan' && request.method === 'POST') return wrap({ scan: await scanPlans(ctx) });
       if (p === '/admin/realtime') { const st = rtSettings(config); const routing = await loadRouting(ctx); const cov = routeFor(st, routing, new Set(), routing.scan); return wrap({ settings: { enabled: st.enabled, intervalSec: st.intervalSec, crypto: st.crypto, configured: st.configured, tdCredits: st.tdCredits }, routing, coverage: Object.keys(RT_MAP).map(id => ({ id, ...(cov[id] || { provider: null }), options: Object.keys(RT_MAP[id]).filter(k => k !== 'leg'), leg: !!RT_MAP[id].leg, override: routing.overrides[id] || 'auto' })), providers: PROVIDERS, probe: st.enabled ? await rtQuotes(ctx) : null }); }
@@ -181,8 +186,12 @@ export default {
     const url = new URL(request.url);
     if (url.pathname.startsWith('/api/')) {
       if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
+      const t0 = Date.now();
       const res = await handleApi(request, env, url);
       for (const [k, v] of Object.entries(CORS)) res.headers.set(k, v);
+      const route = url.pathname.replace(/^\/api/, '').split('/').filter(Boolean).slice(0, url.pathname.startsWith('/api/admin') || url.pathname.startsWith('/api/rt') ? 2 : 1).join('/');
+      U.record({ svc: 'vercel-fn', op: request.method + ' /' + route, status: res.status, ms: Date.now() - t0 });
+      U.maybeFlush(env.__store, ctx && ctx.waitUntil ? (p) => ctx.waitUntil(p) : null);
       return res;
     }
     if (env.ASSETS) return env.ASSETS.fetch(request);

@@ -67,6 +67,24 @@ Vercel Edge cannot hold sockets open, so streams run in the browser, which means
 `/api/rt/config`. Admin → Real-time shows each stream's status, symbol count, ticks and last tick. Polling keeps running
 underneath, so a stream that drops never leaves a price stale.
 
+## Usage & API logs (Admin)
+
+Every upstream call goes through one fetch helper, which records the service, operation (path only: keys, tickers and
+query strings are never logged), status, latency and size. Anthropic responses add model and token counts (input, cache
+write, cache read, output); Exa adds its reported `costDollars`; Twelve Data counts credits (one per symbol). Storage
+operations and our own function invocations are counted too, as are live-TV relay requests.
+
+- **Estimate:** list prices as of 28 Oct 2026 (Anthropic per-model token rates including Haiku 5.5's long-prompt tier,
+  Exa $7/1k searches, Parallel $1/1k, Vercel $0.60/M invocations, Blob $5/M writes and $0.40/M reads), editable in Admin,
+  plus monthly plan fees you enter. Month to date, a straight-line projection, a daily chart by service, a per-service
+  table with per-operation detail, model token use, and a filterable API log with CSV export.
+- **Storage:** each server instance keeps counts in memory and saves one shard per day (`usage/d/<day>/<instance>`) at most
+  every *Usage save interval* minutes (default 60) and only when something changed; a model call saves on the next request.
+  The daily job folds finished days into `usage/day/<day>`. Counts from an instance that stops before its next save are
+  lost, so totals are a floor; provider dashboards and Vercel's usage page are the billing record.
+- **Settings:** *Usage meter* (on/off) and *Usage save interval* in the credentials panel (group Usage).
+- Admin keys are now read from storage at most once every 30 s per instance instead of on every request.
+
 ## Valuation and systematic-selling measures
 
 Two pre-crash conditions are measured from free official data and public prices (`src/valuation.js`):

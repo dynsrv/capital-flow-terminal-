@@ -85,7 +85,7 @@ export async function scheduledRefresh(ctx) {
 /** Models available to the configured key (for the Admin selector). */
 export async function listModels(config) {
   const key = config.keys.ANTHROPIC_API_KEY; if (!key) return { models: [], note: 'Add an Anthropic key to list models.' };
-  const j = await fetchJSON('https://api.anthropic.com/v1/models?limit=50', { headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' } });
+  const j = await fetchJSON('https://api.anthropic.com/v1/models?limit=50', { tag: 'model list', headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' } });
   const models = (j.data || []).map(m => ({ id: m.id, name: m.display_name || m.id, created: m.created_at })).sort((a, b) => (b.created || '').localeCompare(a.created || ''));
   return { models, current: config.keys.ANTHROPIC_MODEL || 'claude-sonnet-5-5' };
 }

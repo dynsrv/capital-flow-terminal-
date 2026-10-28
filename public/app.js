@@ -947,6 +947,7 @@
         ${card({ icon: 'info', title: 'How data is handled', body: '<div class="sm dim" style="display:flex;flex-direction:column;gap:8px"><p><b>No key needed:</b> Yahoo Finance (delayed), FRED, CoinGecko public, gold-api.com.</p><p><b>Optional:</b> FRED, EIA, CoinGecko (longer history), Anthropic (AI explanations), Exa or Parallel (news citations).</p><p><b>Cache:</b> quotes 60 s, histories 15 min, macro 1 h. If a source fails, the last value is served and flagged stale.</p><p><b>Demo mode</b> shows a permanent banner and every badge reads demo.</p></div>' })}
       </div></div>
       ${card({ icon: 'pulse', title: 'Real-time data routing', sub: 'Which provider prices each instrument. Switch real-time on and add keys in the Real-time group of the credentials panel', body: '<div id="adm-rt"><p class="dim">Unlock to view.</p></div>' })}
+      ${card({ icon: 'db', title: 'Usage & API logs', sub: 'Every upstream API call, model token and storage operation, with an estimated cost', body: '<div id="adm-usage"><p class="dim">Unlock to view.</p></div>', cls: 'us-card' })}
       ${card({ icon: 'layers', title: 'Market-size reference data', sub: 'Published aggregates behind the Overview treemap', body: '<div id="adm-sizes"><p class="dim">Unlock to edit.</p></div>', foot: 'Update when a newer SIFMA Fact Book or World Gold Council figure is published, and keep the source and as-of date.' })}`;
     const unlock = async () => {
       a.token = $('#adm-token').value; try { sessionStorage.setItem('cft:admin', a.token); } catch (e) {}
@@ -981,7 +982,7 @@
           $('#adm-ai-run').onclick = async (e) => { const b = e.currentTarget; b.disabled = true; const old = b.innerHTML; b.innerHTML = `<span class="spin" style="width:12px;height:12px"></span>Refreshing…`; try { const r = await api('/admin/ai-refresh', { method: 'POST', headers: hdr(), body: JSON.stringify({ model: $('#adm-ai-model').value || undefined, question: $('#adm-ai-q').value || undefined }) }); toast(`Reading refreshed with ${r.reading.model}`); unlock(); } catch (err) { toast(err.message); b.disabled = false; b.innerHTML = old; } };
           $$('#adm-ai [data-go]').forEach(x => x.onclick = () => show(x.dataset.go));
         } catch (e) { $('#adm-ai').innerHTML = errorBox(e.message); }
-        renderAdminUI(hdr); renderAdminNews(hdr); renderAdminTv(hdr); renderAdminStore(hdr); renderAdminRealtime(hdr);
+        renderAdminUI(hdr); renderAdminNews(hdr); renderAdminTv(hdr); renderAdminStore(hdr); renderAdminRealtime(hdr); renderAdminUsage(hdr);
         $('#adm-status').innerHTML = `<div class="tbl"><table class="t"><thead><tr><th>Source</th><th class="num">OK</th><th class="num">Failed</th><th class="num">Stale</th></tr></thead><tbody>${Object.entries(st.bySource).map(([s, x]) => `<tr><td><span style="display:inline-flex;gap:8px;align-items:center"><i class="dot ${x.failed ? 'bad' : 'ok'}"></i>${esc(s)}</span>${x.errors.length ? `<div class="xs muted">${x.errors.map(esc).join('<br>')}</div>` : ''}</td><td class="num up">${x.ok}</td><td class="num ${x.failed ? 'down' : 'muted'}">${x.failed}</td><td class="num ${x.stale ? 'down' : 'muted'}">${x.stale}</td></tr>`).join('')}</tbody></table></div><div id="adm-store" style="margin:10px 0"></div><button class="btn ghost" id="adm-clear">${ic('refresh')}Clear cache</button>`;
         $('#adm-clear').onclick = async () => { try { const r = await api('/admin/cache/clear', { method: 'POST', headers: hdr() }); toast(`Cleared ${r.cleared} cache entries`); } catch (e) { toast(e.message); } };
         $('#adm-sizes').innerHTML = sz.references.filter(r => r.id !== 'CRYPTO_TOTAL').map(r => `<div class="form-row"><label>${esc(r.label)} <span class="xs muted">${esc(r.measure.replace(/_/g, ' '))}</span></label><div class="inline"><input type="number" data-sz="${r.id}" data-f="${r.tonnes ? 'tonnes' : 'usd'}" placeholder="${r.tonnes ? r.tonnes + ' tonnes' : (r.usd / 1e12).toFixed(1) + ' $T'}" value="${r.override ? (r.override.tonnes || r.override.usd / 1e12) : ''}" aria-label="${esc(r.label)} value"><input type="text" data-szs="${r.id}" placeholder="${esc(r.source)}" value="${esc(r.override?.source || '')}" aria-label="Source"><input type="text" data-sza="${r.id}" placeholder="${esc(r.asOf)}" value="${esc(r.override?.asOf || '')}" aria-label="As of" style="flex:0 1 90px"></div></div>`).join('') + `<div class="row-actions" style="margin-top:12px"><button class="btn" id="adm-size-save">Save reference data</button></div>`;
@@ -1168,6 +1169,88 @@
     openProviderSockets();
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden && rt.timer) pollRt(); });
+
+  /* ───────── Admin: usage meter, token use and API logs ───────── */
+  const us = { days: 7, svc: 'all', errs: false, q: '', limit: 60, metric: 'cost' };
+  async function renderAdminUsage(hdr) {
+    const box = $('#adm-usage'); if (!box) return;
+    if (SNAP && !apiBase) { box.innerHTML = `<p class="dim">Usage is measured on the live server. Open the deployed terminal to see it.</p>`; return; }
+    box.innerHTML = `<div class="loading"><span class="spin"></span>Reading usage…</div>`;
+    let r; try { r = await api(`/admin/usage?days=${us.days}`, { headers: hdr() }); } catch (e) { box.innerHTML = errorBox(e.message); return; }
+    const usd = (v) => v == null ? '—' : v === 0 ? '$0' : v < 0.01 ? '<$0.01' : '$' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: v < 10 ? 3 : 2 });
+    const n = (v) => v == null ? '—' : Math.round(v).toLocaleString('en-US');
+    const tk = (v) => !v ? '0' : v >= 1e6 ? (v / 1e6).toFixed(2) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(1) + 'k' : String(v);
+    const kb = (v) => !v ? '—' : v >= 1e6 ? (v / 1e6).toFixed(1) + ' MB' : v >= 1e3 ? Math.round(v / 1e3) + ' KB' : v + ' B';
+    const S = r.services; const tot = S.reduce((t, x) => ({ n: t.n + x.n, err: t.err + x.err, cost: t.cost + x.cost, tin: t.tin + x.tin + x.tcw + x.tcr, tout: t.tout + x.tout }), { n: 0, err: 0, cost: 0, tin: 0, tout: 0 });
+    const ext = S.filter(x => x.svc !== 'vercel-fn' && x.svc !== 'vercel-blob'); const extN = ext.reduce((t, x) => t + x.n, 0), extE = ext.reduce((t, x) => t + x.err, 0);
+    const m = r.month; const proj = m.projected != null ? m.projected + m.planFees : null;
+    const range = us.days === 1 ? 'today' : `last ${us.days} days`;
+    const svcName = Object.fromEntries(S.map(x => [x.svc, x.name]));
+    const tags = (o) => Object.entries(o || {}).map(([k, v]) => `${esc(k)} ×${v}`).join(', ');
+    const logs = () => r.logs.filter(l => (us.svc === 'all' || l.svc === us.svc) && (!us.errs || !l.st || l.st >= 400) && (!us.q || (l.op + ' ' + (l.tag || '') + ' ' + (l.err || '') + ' ' + (l.model || '')).toLowerCase().includes(us.q.toLowerCase())));
+    const logRows = () => { const L = logs(); return { L, html: L.slice(0, us.limit).map(l => `<tr class="${!l.st || l.st >= 400 ? 'us-bad' : ''}"><td class="mono nowrap">${esc(l.t.slice(5, 19).replace('T', ' '))}</td><td>${esc(svcName[l.svc] || l.svc)}</td><td class="mono us-op">${esc(l.op)}${l.model ? `<span class="xs muted"> · ${esc(l.model)}</span>` : ''}</td><td class="num mono ${!l.st || l.st >= 400 ? 'down' : ''}">${l.st || 'ERR'}</td><td class="num mono">${n(l.ms)}</td><td class="num mono">${kb(l.b)}</td><td class="num mono">${l.tin != null ? `${tk(l.tin + (l.tcr || 0) + (l.tcw || 0))} / ${tk(l.tout)}` : l.units > 1 ? l.units + ' cr' : ''}</td><td class="num mono">${l.cost ? usd(l.cost) : ''}</td><td class="xs muted us-note">${esc(l.tag || '')}${l.err ? ` <span class="down">${esc(l.err)}</span>` : ''}</td></tr>`).join('') }; };
+    const P = r.prices; const planKeys = Object.keys(r.defaults.plans);
+    box.innerHTML = `<div class="us">
+      <div class="us-bar"><div class="seg" id="us-days">${[[1, 'Today'], [7, '7D'], [30, '30D']].map(([d, l]) => `<button type="button" data-d="${d}" class="${us.days === d ? 'active' : ''}">${l}</button>`).join('')}</div>
+        <span class="xs muted">${esc(r.from)} → ${esc(r.to)} UTC</span><span style="flex:1"></span>
+        <button class="btn ghost" id="us-refresh">${ic('refresh')}Refresh</button><button class="btn ghost" id="us-save">${ic('download')}Save counts now</button></div>
+      <div class="us-kpis">
+        <div><span>Estimated usage cost</span><b>${usd(tot.cost)}</b><small>${range}, metered calls and tokens</small></div>
+        <div><span>Month to date</span><b>${usd(m.usage)}</b><small>since ${esc(m.start)}${m.planFees ? ` · plus ${usd(m.planFees)} plan fees` : ''}</small></div>
+        <div><span>Projected this month</span><b>${proj != null ? usd(proj) : '—'}</b><small>${proj != null ? `usage pace × ${m.daysInMonth} days${m.planFees ? ' + plan fees' : ''}` : 'needs a few hours of data'}</small></div>
+        <div><span>External API calls</span><b>${n(extN)}</b><small>${extE ? `<span class="down">${n(extE)} failed (${(extE / Math.max(1, extN) * 100).toFixed(1)}%)</span>` : 'no failures'}</small></div>
+        <div><span>Model tokens</span><b>${tk(tot.tin + tot.tout)}</b><small>${tk(tot.tin)} in · ${tk(tot.tout)} out</small></div>
+        <div><span>Function invocations</span><b>${n((S.find(x => x.svc === 'vercel-fn') || {}).n)}</b><small>CDN cache hits are not counted (they never reach the function)</small></div>
+      </div>
+      <div class="us-chart-h"><span class="sm">Daily ${us.metric === 'cost' ? 'estimated cost' : 'calls'} by service</span><div class="seg" id="us-metric"><button type="button" data-m="cost" class="${us.metric === 'cost' ? 'active' : ''}">Cost</button><button type="button" data-m="calls" class="${us.metric === 'calls' ? 'active' : ''}">Calls</button></div></div>
+      <div id="us-chart" class="us-chart"></div>
+      <div class="tbl"><table class="t us-svc"><thead><tr><th>Service</th><th class="us-hide">Kind</th><th class="num">Calls</th><th class="num">Failed</th><th class="num us-hide">Avg ms</th><th class="num us-hide">Data</th><th class="num">Tokens in / out</th><th class="num">Est. cost</th></tr></thead><tbody>
+        ${S.length ? S.map((x, i) => `<tr class="us-row" data-i="${i}"><td><button type="button" class="us-tog" aria-expanded="false">${ic('chev')}</button><b>${esc(x.name)}</b></td><td class="xs muted us-hide">${esc(x.kind)}</td><td class="num mono">${n(x.n)}${x.unit === 'credits' && x.units !== x.n ? `<span class="xs muted"> · ${n(x.units)} cr</span>` : ''}</td><td class="num mono ${x.err ? 'down' : 'muted'}">${n(x.err)}</td><td class="num mono us-hide">${n(x.n ? x.ms / x.n : 0)}</td><td class="num mono us-hide">${kb(x.bytes)}</td><td class="num mono">${x.tin || x.tout ? `${tk(x.tin + x.tcw + x.tcr)} / ${tk(x.tout)}` : '—'}</td><td class="num mono"><b>${usd(x.cost)}</b></td></tr>
+${x.ops.sort((a, b) => b.cost - a.cost || b.n - a.n).map(o => `<tr class="us-op-row" data-for="${i}" hidden><td class="mono us-op">${esc(o.op)}${o.model ? ` <span class="xs muted">${esc(o.model)}</span>` : ''}${Object.keys(o.tags || {}).length ? `<div class="xs muted">${tags(o.tags)}</div>` : ''}</td><td class="us-hide"></td><td class="num mono">${n(o.n)}</td><td class="num mono ${o.err ? 'down' : 'muted'}">${n(o.err)}</td><td class="num mono us-hide">${n(o.avgMs)}</td><td class="num mono us-hide"></td><td class="num mono">${o.tin || o.tout ? `${tk(o.tin + o.tcw + o.tcr)} / ${tk(o.tout)}` : ''}</td><td class="num mono">${usd(o.cost)}</td></tr>`).join('')}`).join('') : `<tr><td colspan="8" class="dim">Nothing counted yet in this range.</td></tr>`}
+      </tbody></table></div>
+      ${r.tokens.length ? `<div><div class="field"><label>Model token use</label></div><div class="tbl"><table class="t"><thead><tr><th>Model</th><th class="num">Calls</th><th class="num">Input</th><th class="num">Cache write</th><th class="num">Cache read</th><th class="num">Output</th><th class="num">Est. cost</th><th>Used by</th></tr></thead><tbody>${r.tokens.map(t => `<tr><td class="mono">${esc(t.model)}</td><td class="num mono">${n(t.calls)}</td><td class="num mono">${tk(t.tin)}</td><td class="num mono">${tk(t.tcw)}</td><td class="num mono">${tk(t.tcr)}</td><td class="num mono">${tk(t.tout)}</td><td class="num mono"><b>${usd(t.cost)}</b></td><td class="xs muted">${tags(t.tags)}</td></tr>`).join('')}</tbody></table></div></div>` : ''}
+      <div>
+        <div class="us-bar"><span class="sm">API log</span><select id="us-svc" aria-label="Service"><option value="all">All services</option>${[...new Set(r.logs.map(l => l.svc))].map(s => `<option value="${esc(s)}" ${us.svc === s ? 'selected' : ''}>${esc(svcName[s] || s)}</option>`).join('')}</select>
+          <label class="us-chk"><input type="checkbox" id="us-errs" ${us.errs ? 'checked' : ''}>Failures only</label><input type="search" id="us-q" placeholder="Filter: operation, feature, model, error" value="${esc(us.q)}"><span style="flex:1"></span><button class="btn ghost" id="us-csv">${ic('download')}CSV</button></div>
+        <div class="tbl scroll-y us-log"><table class="t"><thead><tr><th>Time (UTC)</th><th>Service</th><th>Operation</th><th class="num">Status</th><th class="num">ms</th><th class="num">Size</th><th class="num">Tokens / credits</th><th class="num">Cost</th><th>Feature / error</th></tr></thead><tbody id="us-log"></tbody></table></div>
+        <div class="row-actions" id="us-more-w"></div>
+        <p class="xs muted">The log keeps the latest 250 external calls per server instance per day (storage reads and function invocations are counted above but only failures are logged). Keys, tickers and query strings are never written to the log.</p>
+      </div>
+      <details class="us-rates"><summary class="sm dim">Rates used for the estimate</summary>
+        <div class="us-rates-b">
+          <div><div class="field"><label>Monthly plan fees (USD, added to the projection)</label></div><div class="us-grid">${planKeys.map(k => `<label><span>${esc((r.services.find(x => x.svc === k) || {}).name || ({ vercel: 'Vercel plan', anthropic: 'Anthropic (AI)', exa: 'Exa search', parallel: 'Parallel search', massive: 'Massive', alpaca: 'Alpaca', finnhub: 'Finnhub', twelvedata: 'Twelve Data' })[k] || k)}</span><input type="number" min="0" step="0.01" data-plan="${k}" value="${P.plans[k] || ''}" placeholder="0"></label>`).join('')}</div></div>
+          <div><div class="field"><label>Metered rates (USD)</label></div><div class="us-grid">
+            <label><span>Exa, per search</span><input type="number" min="0" step="0.0001" data-unit="exa" value="${P.perUnit.exa}"></label>
+            <label><span>Parallel, per search</span><input type="number" min="0" step="0.0001" data-unit="parallel" value="${P.perUnit.parallel}"></label>
+            <label><span>Function invocations, per million</span><input type="number" min="0" step="0.01" data-unit="vercel-fn" data-scale="1e6" value="${+(P.perUnit['vercel-fn'] * 1e6).toFixed(4)}"></label>
+            <label><span>Blob writes and lists, per million</span><input type="number" min="0" step="0.01" data-unit="blob-advanced" data-scale="1e6" value="${+(P.perUnit['blob-advanced'] * 1e6).toFixed(4)}"></label>
+            <label><span>Blob reads, per million</span><input type="number" min="0" step="0.01" data-unit="blob-simple" data-scale="1e6" value="${+(P.perUnit['blob-simple'] * 1e6).toFixed(4)}"></label>
+          </div></div>
+          <div><div class="field"><label>Anthropic, per million tokens (input · 5-min cache write · cache read · output)</label></div><div class="tbl"><table class="t"><tbody>${Object.entries(P.anthropic).map(([k, v]) => `<tr><td class="mono">${esc(k)}</td><td class="num mono">$${v.in} · $${v.cw} · $${v.cr} · $${v.out}${v.long ? `<div class="xs muted">over ${tk(v.long.over)} prompt tokens: $${v.long.in} · $${v.long.cw} · $${v.long.cr} · $${v.long.out}</div>` : ''}</td></tr>`).join('')}</tbody></table></div></div>
+          <div class="row-actions"><button class="btn" id="us-rates-save">Save rates</button><span class="xs muted" style="align-self:center">List prices as of 28 Oct 2026 from Anthropic, Exa, Parallel and Vercel. Free plans include an allowance, so a metered estimate can be above what you are billed.</span></div>
+        </div></details>
+      <p class="xs muted us-meter">${r.meter.enabled ? `Counting on. Each server instance saves its counts every ${r.meter.flushMin} min when something changed (and right after a model call); ${n(r.meter.writesThisMonth)} saves so far this month. This instance started ${fmt.ago(r.meter.instanceStarted)}${r.meter.lastFlush ? `, last saved ${fmt.ago(r.meter.lastFlush)}` : ''}. Counts from an instance that shut down before its next save are lost, so totals are a floor.` : 'Counting is off (Usage meter in the credentials panel).'} ${r.meter.persistent ? '' : '<span class="down">No persistent store: counts reset with the server.</span>'} Estimates only: provider dashboards and Vercel's usage page are the billing record.</p>
+    </div>`;
+    const drawLog = () => { const { L, html } = logRows(); $('#us-log').innerHTML = html || `<tr><td colspan="9" class="dim">No calls match.</td></tr>`; $('#us-more-w').innerHTML = L.length > us.limit ? `<button class="btn ghost" id="us-more">Show more (${L.length - us.limit} left)</button>` : ''; const mb = $('#us-more'); if (mb) mb.onclick = () => { us.limit += 100; drawLog(); }; };
+    drawLog();
+    const T = tok(); const C = series(T); const svcs = S.filter(x => us.metric === 'cost' ? x.cost > 0 : x.n > 0).map(x => x.svc);
+    if (r.daily.length && svcs.length) {
+      const byDay = r.daily.map(d => d.day);
+      chart('#us-chart', { grid: { left: 8, right: 8, top: 26, bottom: 22, containLabel: true }, legend: { top: 0, left: 0, textStyle: { color: T.fg2, fontSize: 11 * fs() }, itemWidth: 10, itemHeight: 10, type: 'scroll' }, tooltip: { trigger: 'axis', valueFormatter: v => us.metric === 'cost' ? (v && v < 0.01 ? '$' + v.toPrecision(2) : usd(v)) : n(v) },
+        xAxis: { type: 'category', data: byDay.map(d => d.slice(5)), ...axis(T), splitLine: { show: false } }, yAxis: { type: 'value', ...axis(T), axisLabel: { color: T.fg3, fontSize: 10.5 * fs(), formatter: v => us.metric === 'cost' ? (v === 0 ? '$0' : v < 0.01 ? '$' + v.toPrecision(2) : '$' + (v < 1 ? v.toFixed(2) : v.toFixed(0))) : n(v) } },
+        series: svcs.map((s, i) => ({ name: svcName[s] || s, type: 'bar', stack: 'u', barMaxWidth: 26, itemStyle: { color: C[i % C.length], borderRadius: i === svcs.length - 1 ? [3, 3, 0, 0] : 0 }, data: r.daily.map(d => us.metric === 'cost' ? +(d.bySvc[s] || 0).toFixed(5) : (d.calls && d.calls[s]) || 0) })) });
+    } else $('#us-chart').innerHTML = `<div class="empty">${ic('info')}Nothing to chart yet: ${us.metric === 'cost' ? 'no metered cost in this range' : 'no calls in this range'}.</div>`;
+    $$('#us-days button').forEach(b => b.onclick = () => { us.days = Number(b.dataset.d); us.limit = 60; renderAdminUsage(hdr); });
+    $$('#us-metric button').forEach(b => b.onclick = () => { us.metric = b.dataset.m; renderAdminUsage(hdr); });
+    $('#us-refresh').onclick = () => renderAdminUsage(hdr);
+    $('#us-save').onclick = async (e) => { const b = e.currentTarget; b.disabled = true; try { await api('/admin/usage/flush', { method: 'POST', headers: hdr() }); toast('Counts saved'); renderAdminUsage(hdr); } catch (err) { toast(err.message); b.disabled = false; } };
+    $$('.us-svc .us-row').forEach(tr => tr.onclick = () => { const subs = $$(`.us-op-row[data-for="${tr.dataset.i}"]`); const open = !!(subs[0] && subs[0].hidden); subs.forEach(x => x.hidden = !open); tr.querySelector('.us-tog').setAttribute('aria-expanded', String(open)); tr.classList.toggle('open', open); });
+    $('#us-svc').onchange = (e) => { us.svc = e.target.value; us.limit = 60; drawLog(); };
+    $('#us-errs').onchange = (e) => { us.errs = e.target.checked; drawLog(); };
+    $('#us-q').oninput = (e) => { us.q = e.target.value; drawLog(); };
+    $('#us-csv').onclick = () => csvDownload(`api-log-${r.to}.csv`, logs().map(l => ({ time: l.t, service: l.svc, operation: l.op, status: l.st, ms: l.ms, bytes: l.b, model: l.model || '', tokens_in: l.tin ?? '', cache_write: l.tcw ?? '', cache_read: l.tcr ?? '', tokens_out: l.tout ?? '', credits: l.units, cost_usd: l.cost, feature: l.tag || '', error: l.err || '' })));
+    $('#us-rates-save').onclick = async () => { const plans = {}, perUnit = {}; $$('#adm-usage [data-plan]').forEach(i => { plans[i.dataset.plan] = i.value === '' ? '' : Number(i.value); }); $$('#adm-usage [data-unit]').forEach(i => { if (i.value !== '') perUnit[i.dataset.unit] = Number(i.value) / (i.dataset.scale ? Number(i.dataset.scale) : 1); }); try { await api('/admin/usage/prices', { method: 'POST', headers: hdr(), body: JSON.stringify({ plans, perUnit }) }); toast('Rates saved; new calls use them'); renderAdminUsage(hdr); } catch (e) { toast(e.message); } };
+  }
 
   async function renderAdminRealtime(hdr) {
     const box = $('#adm-rt'); if (!box) return;

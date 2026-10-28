@@ -17,7 +17,7 @@ async function timed(fn) {
   }
 }
 
-const json = async (url, opts) => JSON.parse(await fetchText(url, { timeoutMs: 20000, ...opts }));
+const json = async (url, opts) => JSON.parse(await fetchText(url, { timeoutMs: 20000, tag: 'key test', ...opts }));
 
 export const TESTS = {
   async ANTHROPIC_API_KEY(key, keys) {

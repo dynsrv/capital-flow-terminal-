@@ -18,11 +18,11 @@ Rules:
 Return strict JSON: {"findings":[{"signal":"","evidence":["..."],"possibleCause":"","crossAssetImpact":"","confidence":"Low|Medium|High","confidenceWhy":"","whatToWatch":["..."],"classification":{"verifiedFacts":["..."],"historicalRelationships":["..."],"hypotheses":["..."],"scenarios":["..."]},"citations":[1,2]}],"overview":"2-3 sentence summary of what is changing and why it matters"}`;
 
 export async function exaSearch(key, query, n = 6) {
-  const j = await fetchJSON('https://api.exa.ai/search', { method: 'POST', timeoutMs: 20000, headers: { 'x-api-key': key, 'content-type': 'application/json' }, body: JSON.stringify({ query, numResults: n, type: 'auto', contents: { highlights: true }, startPublishedDate: new Date(Date.now() - 7 * 86400e3).toISOString() }) });
+  const j = await fetchJSON('https://api.exa.ai/search', { method: 'POST', timeoutMs: 20000, tag: 'news search', headers: { 'x-api-key': key, 'content-type': 'application/json' }, body: JSON.stringify({ query, numResults: n, type: 'auto', contents: { highlights: true }, startPublishedDate: new Date(Date.now() - 7 * 86400e3).toISOString() }) });
   return (j.results || []).map((r, i) => ({ n: i + 1, title: r.title, url: r.url, snippet: (r.highlights || []).join(' ').slice(0, 600), published: r.publishedDate || null, provider: 'exa' }));
 }
 export async function parallelSearch(key, query, n = 6) {
-  const j = await fetchJSON('https://api.parallel.ai/v1/search', { method: 'POST', timeoutMs: 25000, headers: { 'x-api-key': key, 'content-type': 'application/json' }, body: JSON.stringify({ objective: query, search_queries: [query], mode: 'fast', advanced_settings: { max_results: n } }) });
+  const j = await fetchJSON('https://api.parallel.ai/v1/search', { method: 'POST', timeoutMs: 25000, tag: 'news search', headers: { 'x-api-key': key, 'content-type': 'application/json' }, body: JSON.stringify({ objective: query, search_queries: [query], mode: 'fast', advanced_settings: { max_results: n } }) });
   return (j.results || []).slice(0, n).map((r, i) => ({ n: i + 1, title: r.title, url: r.url, snippet: (r.excerpts || []).join(' ').slice(0, 600), published: r.publish_date || null, provider: 'parallel' }));
 }
 
@@ -65,7 +65,7 @@ export async function intelligence(ctx, { ids, question, model } = {}) {
   const userMsg = `INPUT DATA (measured):\n${JSON.stringify(inputs, null, 1)}\n\nNEWS SNIPPETS:\n${news.items.length ? news.items.map(n => `[${n.n}] ${n.title} (${n.published || 'n.d.'}) ${n.url}\n${n.snippet}`).join('\n\n') : '(none)'}\n\n${question ? `USER QUESTION: ${question}\n` : ''}Produce 2-5 findings, most significant first.`;
   try {
     const j = await fetchJSON('https://api.anthropic.com/v1/messages', {
-      method: 'POST', timeoutMs: 60000,
+      method: 'POST', timeoutMs: 60000, tag: 'AI reading',
       headers: { 'x-api-key': apiKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
       body: JSON.stringify({ model: model || config.keys.ANTHROPIC_MODEL || 'claude-sonnet-5-5', max_tokens: 2500, system: SYSTEM, messages: [{ role: 'user', content: userMsg }] }),
     });

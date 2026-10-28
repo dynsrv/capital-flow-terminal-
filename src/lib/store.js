@@ -6,6 +6,7 @@
 // The hot caches (quotes, histories) stay in memory; this store holds what must survive restarts:
 // admin credentials, AI readings, daily history snapshots, daily state snapshots, stream lists.
 
+import { record } from './usage.js';
 let blobMod = null;
 async function blob() { if (!blobMod) blobMod = await import('@vercel/blob'); return blobMod; }
 
@@ -60,6 +61,14 @@ export async function decrypt(secret, payload) {
   return new TextDecoder().decode(pt);
 }
 
+function metered(b) {
+  if (b.name !== 'vercel-blob') return b;
+  const wrap = (op, fn) => async (...a) => { const t0 = Date.now(); try { const r = await fn(...a); record({ svc: 'vercel-blob', op, status: 200, ms: Date.now() - t0, quiet: true }); return r; } catch (e) { record({ svc: 'vercel-blob', op, status: e.status || 500, ms: Date.now() - t0, err: e.message, quiet: true }); throw e; } };
+  return { name: b.name, get: wrap('get', b.get), put: wrap('put', b.put), del: wrap('del', b.del), list: wrap('list', b.list) };
+}
+
+const shared = new Map(); // per-instance memo for reads that accept a max age (saves one storage read per request)
+
 export function createStore(env) {
   let backend;
   if (env.STORE && typeof env.STORE.get === 'function' && typeof env.STORE.put === 'function' && env.STORE.name) backend = env.STORE;
@@ -67,6 +76,7 @@ export function createStore(env) {
   else if (env.STORE_KV && typeof env.STORE_KV.get === 'function') backend = kvBackend(env.STORE_KV);
   else if (env.CACHE && typeof env.CACHE.list === 'function' && env.CACHE.__cloudflare) backend = kvBackend(env.CACHE);
   else backend = memoryBackend;
+  backend = metered(backend);
   const secret = env.STORE_SECRET || env.ADMIN_TOKEN || '';
   const memo = new Map(); // per-isolate read-through memo for JSON docs
 
@@ -74,18 +84,18 @@ export function createStore(env) {
     name: backend.name,
     persistent: backend.name !== 'memory',
     async getJSON(key, { secure = false, maxAgeMs = 0 } = {}) {
-      const m = memo.get(key); if (m && (!maxAgeMs || Date.now() - m.t < maxAgeMs)) return m.v;
+      const m = memo.get(key) || (maxAgeMs ? shared.get(backend.name + ':' + key) : null); if (m && (!maxAgeMs || Date.now() - m.t < maxAgeMs)) return m.v;
       let text = await backend.get(key); if (text == null) { memo.set(key, { v: null, t: Date.now() }); return null; }
       if (secure) { if (!secret) throw new Error('STORE_SECRET or ADMIN_TOKEN is required to read encrypted data'); text = await decrypt(secret, text); }
       let v = null; try { v = JSON.parse(text); } catch (e) { v = null; }
-      memo.set(key, { v, t: Date.now() }); return v;
+      memo.set(key, { v, t: Date.now() }); if (maxAgeMs) shared.set(backend.name + ':' + key, { v, t: Date.now() }); return v;
     },
     async putJSON(key, value, { secure = false } = {}) {
       let text = JSON.stringify(value);
       if (secure) { if (!secret) throw new Error('STORE_SECRET or ADMIN_TOKEN is required to save encrypted data'); text = await encrypt(secret, text); }
-      await backend.put(key, text); memo.set(key, { v: value, t: Date.now() });
+      await backend.put(key, text); memo.set(key, { v: value, t: Date.now() }); shared.set(backend.name + ':' + key, { v: value, t: Date.now() });
     },
-    async del(key) { await backend.del(key); memo.delete(key); },
+    async del(key) { await backend.del(key); memo.delete(key); shared.delete(backend.name + ':' + key); },
     async list(prefix) { return backend.list(prefix); },
     forget(key) { memo.delete(key); },
   };

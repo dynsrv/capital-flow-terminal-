@@ -1,3 +1,4 @@
+import { recordFetch } from './usage.js';
 export function json(data, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(data), {
     status,
@@ -12,19 +13,24 @@ export function error(message, status = 500, extra = {}) {
 const UA = 'Mozilla/5.0 (compatible; CapitalFlowTerminal/0.1; +https://github.com)';
 
 /** fetch with timeout, UA header and a clear error on non-2xx */
-export async function fetchText(url, { timeoutMs = 12000, headers = {}, method = 'GET', body } = {}) {
+export async function fetchText(url, { timeoutMs = 12000, headers = {}, method = 'GET', body, tag } = {}) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), timeoutMs);
+  const t0 = Date.now(); let status = 0, text = '';
   try {
     const res = await fetch(url, { method, body, headers: { 'user-agent': UA, accept: '*/*', ...headers }, signal: ctrl.signal });
-    const text = await res.text();
+    status = res.status; text = await res.text();
     if (!res.ok) {
       const snippet = text.slice(0, 120).replace(/\s+/g, ' ');
       const err = new Error(`HTTP ${res.status} from ${new URL(url).host}: ${snippet}`);
       err.status = res.status;
       throw err;
     }
+    recordFetch(url, method, status, Date.now() - t0, text, null, tag);
     return text;
+  } catch (e) {
+    recordFetch(url, method, status, Date.now() - t0, status ? text : '', e.name === 'AbortError' ? 'timeout' : e.message, tag);
+    throw e;
   } finally { clearTimeout(t); }
 }
 

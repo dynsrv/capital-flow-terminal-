@@ -1,3 +1,4 @@
+import { record } from './lib/usage.js';
 // Live TV: broadcasters' own HLS (.m3u8) streams, played in the browser with hls.js (no YouTube).
 //
 // Each channel lists one or more sources tried in order. Most broadcasters allow playback from any site (CORS *),
@@ -96,7 +97,9 @@ export async function hlsRelay(ctx, request, url) {
   const headers = { 'user-agent': UA, accept: '*/*' };
   if (ref) { headers.referer = ref; headers.origin = new URL(ref).origin; }
   const isPlaylist = /\.m3u8?(\?|$)/i.test(target.pathname + target.search);
-  let up; try { up = await fetch(target.href, { headers, redirect: 'follow' }); } catch (e) { return new Response('Stream server unreachable', { status: 502, headers: CORS }); }
+  const t0 = Date.now(); let up;
+  try { up = await fetch(target.href, { headers, redirect: 'follow' }); } catch (e) { record({ svc: 'hls-relay', op: isPlaylist ? 'playlist' : 'segment', status: 0, ms: Date.now() - t0, err: 'unreachable ' + target.hostname, quiet: true }); return new Response('Stream server unreachable', { status: 502, headers: CORS }); }
+  record({ svc: 'hls-relay', op: isPlaylist ? 'playlist' : 'segment', status: up.status, ms: Date.now() - t0, bytes: Number(up.headers.get('content-length')) || 0, err: up.ok ? null : target.hostname, quiet: true });
   if (!up.ok) return new Response(`Stream server answered ${up.status}`, { status: up.status === 404 ? 404 : 502, headers: CORS });
   const ct = up.headers.get('content-type') || '';
   const finalUrl = new URL(up.url || target.href);
