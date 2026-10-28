@@ -4,8 +4,8 @@
 
 export const CREDENTIAL_FIELDS = [
   { key: 'ANTHROPIC_API_KEY', label: 'Anthropic API key', group: 'AI', help: 'Enables AI explanations in Intelligence (signal, evidence, cause, impact, confidence, what to watch).', test: true },
-  { key: 'INTEL_MODEL', label: 'Market Intelligence model', group: 'AI', help: 'Model for the AI market reading and the five-scenario outlook. Default: claude-fable-5-1. News curation keeps the Anthropic model below.', secret: false, placeholder: 'claude-fable-5-1' },
-  { key: 'ANTHROPIC_MODEL', label: 'Anthropic model', group: 'AI', help: 'Model ID used for explanations. Default: claude-sonnet-5-5.', secret: false, placeholder: 'claude-sonnet-5-5' },
+  { key: 'INTEL_MODEL', label: 'Market Intelligence model', group: 'AI', help: 'Model for the AI market reading and the five-scenario outlook. Default: claude-sonnet-5-5. Test sends a one-line request to check the model answers with your key.', secret: false, placeholder: 'claude-sonnet-5-5', models: true, test: true },
+  { key: 'ANTHROPIC_MODEL', label: 'Anthropic model', group: 'AI', help: 'Model for everything else that calls Claude, such as AI news curation. Default: claude-sonnet-5-5. Test sends a one-line request to check the model answers with your key.', secret: false, placeholder: 'claude-sonnet-5-5', models: true, test: true },
   { key: 'AI_AUTO_REFRESH', label: 'Automatic AI refresh', group: 'AI', help: 'off: only when you press Refresh. daily: once a day after the US close. on-change: on the daily run, only if the regime, stress band or high-severity anomalies changed since the last reading.', secret: false, placeholder: 'off', options: ['off', 'daily', 'on-change'] },
   { key: 'NEWS_AI_CURATION', label: 'AI news curation', group: 'AI', help: 'off: keyword rules only. manual: curate when you press the button in Admin. daily: also run with the daily job.', secret: false, placeholder: 'off', options: ['off', 'manual', 'daily'] },
   { key: 'ANOMALY_SCHEDULE', label: 'Anomaly scan', group: 'AI', help: 'live: detected anomalies are computed when someone opens the page. daily: one stored scan a day after the US close (22:00 UTC). twice-daily: also at 09:15 UTC after the Asian closes. Scheduled scans record what is new or cleared since the previous scan.', secret: false, placeholder: 'live', options: ['live', 'daily', 'twice-daily'] },
@@ -95,4 +95,4 @@ export function checkAdminAuth(request, env) {
 }
 
 /** Model for Market Intelligence (AI reading, scenario outlook). */
-export const intelModel = (config) => (config && config.keys && config.keys.INTEL_MODEL) || 'claude-fable-5-1';
+export const intelModel = (config) => (config && config.keys && config.keys.INTEL_MODEL) || 'claude-sonnet-5-5';

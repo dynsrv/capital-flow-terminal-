@@ -23,7 +23,7 @@ export const TESTS = {
   async ANTHROPIC_API_KEY(key, keys) {
     return timed(async () => {
       const j = await json('https://api.anthropic.com/v1/models?limit=20', { headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01' } });
-      const ids = (j.data || []).map(m => m.id); const want = keys.ANTHROPIC_MODEL || 'claude-sonnet-5-5';
+      const ids = (j.data || []).map(m => m.id); const want = keys.INTEL_MODEL || 'claude-sonnet-5-5';
       return `Key accepted. ${ids.length} models available${ids.length ? `; configured model "${want}" ${ids.includes(want) ? 'is available' : 'was not in the first page of results, check the ID'}` : ''}.`;
     });
   },
@@ -40,12 +40,24 @@ export const TESTS = {
   async MARKET_DATA_API_KEY(key) { return timed(async () => { const j = await json(`https://api.polygon.io/v3/reference/tickers?ticker=SPY&limit=1&apiKey=${encodeURIComponent(key)}`); return `Key accepted. Reference lookup returned ${(j.results || []).length} ticker.`; }); },
 };
 
+// Model checks: one tiny Messages call with the saved Anthropic key, so a wrong ID or a model the key cannot use shows up here.
+const MODEL_DEFAULT = 'claude-sonnet-5-5';
+async function modelTest(model, keys) {
+  return timed(async () => {
+    if (!keys.ANTHROPIC_API_KEY) throw new Error('Save an Anthropic API key first.');
+    const j = await json('https://api.anthropic.com/v1/messages', { method: 'POST', tag: 'model test', headers: { 'x-api-key': keys.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' }, body: JSON.stringify({ model, max_tokens: 16, messages: [{ role: 'user', content: 'Reply with the single word OK.' }] }) });
+    const txt = ((j.content || []).find(c => c.type === 'text') || {}).text || '';
+    return `"${j.model || model}" answered "${txt.trim().slice(0, 20)}" (${(j.usage && j.usage.input_tokens) || 0} in / ${(j.usage && j.usage.output_tokens) || 0} out tokens).`;
+  });
+}
+TESTS.INTEL_MODEL = modelTest; TESTS.ANTHROPIC_MODEL = modelTest;
+
 for (const [k, fn] of Object.entries(RT_TESTS)) TESTS[k] = (key, keys) => timed(() => fn(key, keys));
 
 export async function testCredential(name, value, config) {
   const fn = TESTS[name];
   if (!fn) return { ok: false, message: 'No test is available for this setting.' };
-  const key = value || config.keys[name];
+  const key = value || config.keys[name] || (name === 'INTEL_MODEL' || name === 'ANTHROPIC_MODEL' ? MODEL_DEFAULT : '');
   if (!key) return { ok: false, message: 'No key entered or saved yet.' };
   const r = await fn(key, config.keys);
   return { ...r, tested: value ? 'entered value' : 'saved value' };
