@@ -1607,7 +1607,7 @@ table.t.wb-t td > div.xs.nowrap { white-space: nowrap; }
 .ol-hero .ol-stance b { font-size: calc(22px * var(--fs, 1)); line-height: 1.1; }
 .ol-hero .ol-stance small { font-family: var(--mono); font-size: calc(10.5px * var(--fs, 1)); color: var(--fg-3); }
 .ol-hl-w { display: flex; flex-direction: column; gap: 10px; padding: 14px 18px; min-width: 0; }
-.ol-hl { font-size: calc(15px * var(--fs, 1)); line-height: 1.6; color: var(--fg); }
+.ol-hl { font-size: calc(13px * var(--fs, 1)); line-height: 1.55; color: var(--fg); }
 .ol-kpis { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: calc(12px * var(--fs, 1)); color: var(--fg-3); }
 .ol-kpis b { font-family: var(--mono); color: var(--fg); font-size: calc(13px * var(--fs, 1)); margin-left: 4px; }
 .ol-spec { display: flex; height: 34px; border-radius: 8px; overflow: hidden; gap: 2px; }
