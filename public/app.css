@@ -1619,8 +1619,12 @@ table.t.wb-t td > div.xs.nowrap { white-space: nowrap; }
 /* outlook: scenario table (likelihood, horizon, S&P 500 and USD/IDR ranges on shared axes), detail below */
 .ol-tbl { --olc: minmax(170px, 1.25fr) minmax(150px, 1fr) minmax(92px, .55fr) minmax(170px, 1.15fr) minmax(170px, 1.15fr) 18px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); overflow: hidden; }
 .ol-th, .ol-tbl .ol-tr, .ol-tf { display: grid; grid-template-columns: var(--olc); align-items: center; gap: 16px; padding: 0 14px; }
-.ol-th { padding-top: 9px; padding-bottom: 9px; font-size: calc(10.5px * var(--fs, 1)); color: var(--fg-3); text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid var(--line); }
-.ol-th small { text-transform: none; letter-spacing: 0; margin-left: 4px; color: var(--fg-3); opacity: .8; }
+.ol-th { padding-top: 11px; padding-bottom: 10px; background: color-mix(in srgb, var(--fg) 6%, var(--surface-2)); border-bottom: 1px solid var(--line-2); }
+.ol-th > span { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ol-th b { font-size: calc(12px * var(--fs, 1)); font-weight: 700; color: var(--fg); letter-spacing: .01em; }
+.ol-th small { font-size: calc(10.5px * var(--fs, 1)); color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ol-spot { font-style: normal; display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--fg-2); background: var(--surface); }
+.ol-spot::before { content: ''; width: 2px; height: 9px; border-radius: 1px; background: var(--fg); }
 .ol-tbl .ol-tr { min-height: 54px; padding-top: 8px; padding-bottom: 8px; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; box-shadow: none; text-align: left; width: 100%; position: relative; }
 .ol-tbl .ol-tr::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: transparent; }
 .ol-tbl .ol-tr:hover { background: var(--surface); }
