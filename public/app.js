@@ -1973,7 +1973,7 @@ ${x.ops.sort((a, b) => b.cost - a.cost || b.n - a.n).map(o => `<tr class="us-op-
     $$('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
     const hb = $('#help-btn'); if (hb) hb.classList.toggle('on', view === 'glossary'); const br = $('.brand'); if (br) br.classList.toggle('active', view === 'overview');
     $$('.view').forEach(s => s.classList.toggle('active', s.id === 'view-' + view));
-    $('#page-title').textContent = meta.title; $('#page-sub').textContent = meta.sub; document.title = `${meta.label} · Capital Flow Terminal`;
+    $('#page-title').textContent = meta.title; $('#page-sub').textContent = meta.sub; document.title = `${meta.label} · Market Intelligence`;
     $('#app-title-page').textContent = titleCase(meta.title); $('.topbar').classList.remove('titled'); syncTabs();
     if (location.hash.slice(1) !== view) history.replaceState(null, '', '#' + view);
     window.scrollTo({ top: 0 });

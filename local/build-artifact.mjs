@@ -46,13 +46,15 @@ const bodyInner = html.split('<body>')[1].split('</body>')[0]
   .replace(/<script (defer )?src="\/app.js"><\/script>/, '')
   .replace(/<script (defer )?src="\/glossary.js"><\/script>/, () => `<script>${fs.readFileSync(path.join(ROOT, 'public/glossary.js'), 'utf8')}</script>`)
   .replace('<div id="snapshot-banner"', '<div id="snapshot-banner"');
-const out = `<title>Capital Flow Terminal</title>
+// brand images become data URIs: the artifact is a single file
+const bodyWithBrand = bodyInner.replace(/\/brand\/([a-z0-9-]+\.png)/g, (m, f) => 'data:image/png;base64,' + fs.readFileSync(path.join(ROOT, 'public/brand', f)).toString('base64'));
+const out = `<title>Market Intelligence</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>${css}</style>
 <script>try { document.documentElement.dataset.theme = localStorage.getItem('cft:theme') || 'dark'; } catch (e) { document.documentElement.dataset.theme = 'dark'; }</script>
 <script>${fs.readFileSync(path.join(ROOT, 'public/vendor/echarts.min.js'), 'utf8')}</script>
-${bodyInner}
+${bodyWithBrand}
 <script>window.CFT_SNAPSHOT = ${JSON.stringify(snapshot)};</script>
 <script>${js}</script>
 `;

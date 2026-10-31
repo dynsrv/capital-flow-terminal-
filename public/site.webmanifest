@@ -1,0 +1,24 @@
+{
+ "name": "Market Intelligence",
+ "short_name": "Market Intel",
+ "description": "Global capital flows, markets and a daily AI scenario outlook, with a focus on Indonesia and emerging markets.",
+ "start_url": "/",
+ "scope": "/",
+ "display": "standalone",
+ "background_color": "#0b0b0d",
+ "theme_color": "#5e17eb",
+ "icons": [
+  {
+   "src": "/brand/icon-192.png",
+   "sizes": "192x192",
+   "type": "image/png",
+   "purpose": "any maskable"
+  },
+  {
+   "src": "/brand/icon-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "any maskable"
+  }
+ ]
+}

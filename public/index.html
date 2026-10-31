@@ -3,10 +3,44 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Capital Flow Terminal</title>
-<meta name="description" content="Global capital flow and market intelligence: where capital is concentrated, how markets are changing, and the cross-asset implications.">
-<meta name="theme-color" content="#0a0d13">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23232a38'/%3E%3Cpath d='M7 21l6-7 4 4 8-9' stroke='%23ffffff' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<title>Market Intelligence: Global Capital Flows, Markets & AI Scenario Outlook</title>
+<meta name="description" content="Live cross-asset terminal for global capital flows: equities, bonds, FX, commodities and crypto, credit spreads and world bond yields, anomaly detection, and a daily AI scenario outlook (bull to crash) with S&P 500 and USD/IDR ranges. Focus on Indonesia and emerging markets.">
+<meta name="keywords" content="market intelligence, capital flows, global markets, cross-asset dashboard, bond yields, credit spreads, USD/IDR, Indonesia, emerging markets, S&amp;P 500, market outlook, recession risk, AI market analysis">
+<meta name="author" content="DynSrv · Digital Strategy">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<link rel="canonical" href="https://market.digitalstrategy.id/">
+<meta name="theme-color" content="#0b0b0d" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="color-scheme" content="dark light">
+<meta name="application-name" content="Market Intelligence">
+<meta name="apple-mobile-web-app-title" content="Market Intelligence">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" type="image/png" sizes="32x32" href="/brand/favicon-32.png">
+<link rel="icon" type="image/png" sizes="64x64" href="/brand/favicon-64.png">
+<link rel="apple-touch-icon" href="/brand/apple-touch-icon.png">
+<link rel="manifest" href="/site.webmanifest">
+<!-- shared links (Facebook, LinkedIn, WhatsApp, Telegram, Slack) -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Market Intelligence">
+<meta property="og:url" content="https://market.digitalstrategy.id/">
+<meta property="og:title" content="Market Intelligence: Global Capital Flows & AI Scenario Outlook">
+<meta property="og:description" content="Global capital flows, markets and a daily AI scenario outlook, with a focus on Indonesia and emerging markets.">
+<meta property="og:image" content="https://market.digitalstrategy.id/brand/og.png">
+<meta property="og:image:secure_url" content="https://market.digitalstrategy.id/brand/og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Market Intelligence logo: global capital flows, markets and AI scenario outlook">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="id_ID">
+<!-- X / Twitter -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Market Intelligence: Global Capital Flows & AI Scenario Outlook">
+<meta name="twitter:description" content="Global capital flows, markets and a daily AI scenario outlook, with a focus on Indonesia and emerging markets.">
+<meta name="twitter:image" content="https://market.digitalstrategy.id/brand/og.png">
+<meta name="twitter:image:alt" content="Market Intelligence logo">
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "WebApplication", "name": "Market Intelligence", "alternateName": "Capital Flow Terminal", "url": "https://market.digitalstrategy.id/", "description": "Live cross-asset terminal for global capital flows: equities, bonds, FX, commodities and crypto, credit spreads and world bond yields, anomaly detection, and a daily AI scenario outlook (bull to crash) with S&P 500 and USD/IDR ranges. Focus on Indonesia and emerging markets.", "applicationCategory": "FinanceApplication", "operatingSystem": "Any", "image": "https://market.digitalstrategy.id/brand/og.png", "publisher": {"@type": "Organization", "name": "DynSrv \u00b7 Digital Strategy", "url": "https://digitalstrategy.id", "logo": "https://market.digitalstrategy.id/brand/icon-512.png"}, "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"}}</script>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/app.css">
@@ -21,8 +55,8 @@ try { var u = JSON.parse(localStorage.getItem('cft:ui') || 'null'); if (u) { var
 
 <header class="topbar">
   <div class="top-row">
-    <a class="brand" href="#overview"><span class="logo" data-icon="logo"></span><div class="brand-t"><b>Capital Flow</b><span>Market intelligence terminal</span></div></a>
-    <div class="app-title" id="app-title"><span class="at-main"><b class="at-brand">Capital Flow</b><b class="at-page" id="app-title-page" aria-hidden="true"></b></span><span class="at-sub" id="app-sub"></span></div>
+    <a class="brand" href="#overview"><img class="brand-logo bl-dark" src="/brand/logo-dark.png" alt="Market Intelligence" width="146" height="26"><img class="brand-logo bl-light" src="/brand/logo-light.png" alt="Market Intelligence" width="146" height="26"><img class="brand-mark bl-dark" src="/brand/mark-dark.png" alt="Market Intelligence" width="40" height="26"><img class="brand-mark bl-light" src="/brand/mark-light.png" alt="Market Intelligence" width="40" height="26"></a>
+    <div class="app-title" id="app-title"><span class="at-main"><b class="at-brand">Market Intelligence</b><b class="at-page" id="app-title-page" aria-hidden="true"></b></span><span class="at-sub" id="app-sub"></span></div>
     <nav class="nav" id="nav" aria-label="Main navigation"></nav>
     <div class="top-actions">
       <button id="regime-pill" class="pill mid" title="Rules-based market regime"><i class="dot"></i><span>Regime …</span></button>

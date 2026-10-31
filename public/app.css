@@ -1756,3 +1756,10 @@ a.strip-seg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
 #treemap-note a { color: inherit; text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 2px; }
 #treemap-note a:hover { color: var(--fg); text-decoration-color: currentColor; }
 @media (max-width: 520px) { .ol-trk-t, .ol-trk-r { grid-template-columns: minmax(0, 1fr) 40px 36px 36px 54px; gap: 6px; } .ol-trk-side { padding: 10px; } .ol-sp { width: 54px; } }
+
+/* brand: Market Intelligence logo (full on wide screens, mark only on narrow), one image per theme */
+.brand-logo, .brand-mark { display: block; height: 26px; width: auto; }
+.brand-mark { display: none; }
+:root[data-theme="dark"] .bl-light, :root:not([data-theme]) .bl-light { display: none !important; }
+:root[data-theme="light"] .bl-dark { display: none !important; }
+@media (max-width: 760px) { .brand-logo { display: none; } .brand-mark { display: block; height: 26px; } }
