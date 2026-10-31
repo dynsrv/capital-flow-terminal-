@@ -101,5 +101,5 @@ export const SIZE_REFERENCES = [
   // Gold: computed live = above-ground stock (tonnes) × spot price. Stock figure from World Gold Council.
   { id: 'GOLD_STOCK', label: 'Above-ground gold', cls: 'commodity', measure: 'physical_stock_value', tonnes: 216265, source: 'World Gold Council above-ground stock (end-2024) × live spot', asOf: '2024', url: 'https://www.gold.org/goldhub/data/how-much-gold', live: true },
   // Crypto: live total market cap from CoinGecko (measure: market_cap).
-  { id: 'CRYPTO_TOTAL', label: 'Crypto total market cap', cls: 'crypto', measure: 'market_cap', source: 'CoinGecko /global (live)', live: true },
+  { id: 'CRYPTO_TOTAL', label: 'Crypto total market cap', cls: 'crypto', measure: 'market_cap', source: 'CoinGecko /global (live)', url: 'https://www.coingecko.com/en/global-charts', live: true },
 ];
