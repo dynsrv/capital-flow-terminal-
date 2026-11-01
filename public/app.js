@@ -1190,7 +1190,7 @@
         <div class="ol-ctx-b" data-pane-ctx="odds" ${olState.ctx === 'odds' ? '' : 'hidden'}>${sentences(ai.baseRateNote)}</div>
       </section>
       ${r.history && r.history.length ? `<section class="ol-trk" aria-label="Daily track of the scenario odds">
-        <div class="ol-trk-h"><div><span class="ol-l">Daily track</span><span class="xs muted">How the ranking moved: each day the five scenarios are ranked by likelihood (top = most likely), and each dot shows that day's probability in %.</span></div><div class="seg" role="tablist" id="ol-trk-win">${[['7', '7D'], ['30', '30D'], ['all', 'All']].map(([k, l]) => `<button type="button" data-win="${k}" class="${(olState.win || '30') === k ? 'active' : ''}">${l}</button>`).join('')}</div></div>
+        <div class="ol-trk-h"><div><span class="ol-l">Daily track</span><span class="xs muted">How the odds moved, one point per daily run. Downside scenarios stack from the bottom, so the white line is the chance of a fall of 10% or more.</span></div><div class="seg" role="tablist" id="ol-trk-win">${[['7', '7D'], ['30', '30D'], ['all', 'All']].map(([k, l]) => `<button type="button" data-win="${k}" class="${(olState.win || '30') === k ? 'active' : ''}">${l}</button>`).join('')}</div></div>
         <div class="ol-trk-b"><div id="ol-chart" class="ol-ch"></div><div class="ol-trk-side" id="ol-trk-side"></div></div>
       </section>` : ''}
       ${o.changes ? `<p class="xs muted">Since the previous outlook (${fmt.time(o.changes.previousAt)}): ${o.changes.deltas.filter(d => d.delta).map(d => `${OL[d.id][0]} ${d.from}% → ${d.to}%`).join(', ') || 'no change in the odds'}${o.changes.previousStance !== ai.stance ? ` · stance ${esc(o.changes.previousStance)} → ${esc(ai.stance)}` : ''}.</p>` : ''}`,
@@ -1206,25 +1206,27 @@
       const win = olState.win || '30'; const H = win === 'all' ? all : all.slice(-Number(win));
       const fall = (h) => ['correction', 'bear', 'crash'].reduce((t, id) => t + (h.probabilities[id] || 0), 0);
       const days = H.map(h => h.generatedAt.slice(5, 10).replace('-', '/'));
-      // Bump chart: each run ranks the five scenarios by likelihood (1 = most likely). A line per scenario follows its
-      // rank across days; each dot carries that day's probability, so value changes show even when ranks hold.
-      const SEV = { bull: 0, base: 1, correction: 2, bear: 3, crash: 4 };
-      const rankOf = H.map(h => { const r = {}; SCEN.slice().sort((a, b) => (h.probabilities[b] || 0) - (h.probabilities[a] || 0) || SEV[a] - SEV[b]).forEach((id, i) => { r[id] = i + 1; }); return r; });
-      const lastI = H.length - 1; const cw = ($('#ol-chart') || {}).clientWidth || 600; const tight = cw < 520; const many = H.length > (tight ? 6 : 14);
-      const ink = (id) => (id === 'base' ? '#fff' : '#000');
+      const order = ['crash', 'bear', 'correction', 'base', 'bull'];
+      // Modern 100% stacked area: smooth bands with soft vertical gradients and hairline separators, downside at the
+      // bottom, so the top edge of the red-orange block is the chance of a fall of 10% or more (the white line).
+      // Each band is labelled at its right edge with its current share; the last run is marked with a guide line.
+      const grad = (c) => ({ type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: c }, { offset: 1, color: shade(c, -0.22) }] });
+      const lastI = H.length - 1;
       chart('#ol-chart', {
-        grid: { left: 40, right: tight ? 112 : 128, top: 22, bottom: 8, containLabel: false },
-        tooltip: { trigger: 'axis', axisPointer: { type: 'line', lineStyle: { color: T.fg3, type: 'dashed' } }, formatter: (ps) => { const i = ps[0].dataIndex; const h = H[i]; return `<b>${esc(h.generatedAt.slice(0, 10))}</b>${h.stance ? ` · ${esc(h.stance)}` : ''}<br>${SCEN.slice().sort((a, b) => rankOf[i][a] - rankOf[i][b]).map(id => `#${rankOf[i][id]} <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${C[id]};margin:0 6px"></span>${OL[id][0]} <b>${h.probabilities[id] || 0}%</b>`).join('<br>')}<br><span style="opacity:.75">P(fall ≥10%) <b>${fall(h)}%</b></span>`; } },
-        xAxis: { type: 'category', boundaryGap: false, position: 'top', data: H.map(h => new Date(h.generatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })), axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: true, lineStyle: { color: 'rgba(255,255,255,.07)', type: 'dotted' } }, axisLabel: { color: T.fg2, fontSize: 10.5 * fs(), hideOverlap: true, margin: 12 } },
-        yAxis: { type: 'value', inverse: true, min: 0.5, max: 5.5, interval: 1, axisLine: { show: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false } },
-        series: SCEN.map(id => ({
-          name: OL[id][0], type: 'line', smooth: 0.3, symbol: 'circle', symbolSize: many ? 12 : tight ? 22 : 26, data: H.map((h, i) => ({ value: rankOf[i][id], p: h.probabilities[id] || 0 })),
-          lineStyle: { width: many ? 3 : 5, color: C[id], opacity: .9 }, itemStyle: { color: C[id], borderColor: T.surface, borderWidth: 2 },
-          emphasis: { focus: 'series', lineStyle: { width: many ? 4 : 6 } }, blur: { lineStyle: { opacity: .15 }, itemStyle: { opacity: .25 } },
-          label: { show: !many, position: 'inside', formatter: (p) => `${p.data.p}`, color: ink(id), fontFamily: T.mono, fontWeight: 700, fontSize: 10.5 * fs() },
-          endLabel: { show: true, distance: 14, formatter: (p) => `{n|${OL[id][0]}} {v|${H[lastI].probabilities[id] || 0}%}`, rich: { n: { color: T.fg, fontSize: 11 * fs(), fontFamily: T.mono, fontWeight: 600 }, v: { color: id === 'base' ? T.fg2 : C[id], fontSize: 11 * fs(), fontWeight: 700, fontFamily: T.mono } } },
-          markPoint: { symbol: 'circle', symbolSize: 0, silent: true, data: [{ coord: [0, rankOf[0][id]], label: { show: true, position: 'left', distance: many ? 12 : 20, formatter: `#${rankOf[0][id]}`, color: T.fg3, fontFamily: T.mono, fontSize: 10.5 * fs() } }] },
-        })),
+        grid: { left: 16, right: 132, top: 26, bottom: 4, containLabel: true },
+        tooltip: { trigger: 'axis', axisPointer: { type: 'line', lineStyle: { color: T.fg3, type: 'dashed' } }, formatter: (ps) => { const h = H[ps[0].dataIndex]; return `<b>${esc(h.generatedAt.slice(0, 10))}</b>${h.stance ? ` · ${esc(h.stance)}` : ''}<br>${SCEN.map(id => `<span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${C[id]};margin-right:6px"></span>${OL[id][0]} <b>${h.probabilities[id] || 0}%</b>`).join('<br>')}<br><span style="opacity:.75">P(fall ≥10%) <b>${fall(h)}%</b></span>`; } },
+        xAxis: { type: 'category', boundaryGap: false, data: H.map(h => new Date(h.generatedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })), ...axis(T), axisTick: { show: false }, splitLine: { show: true, lineStyle: { color: 'rgba(255,255,255,.07)', type: 'dotted' } }, axisLabel: { color: T.fg2, fontSize: 10.5 * fs(), hideOverlap: true } },
+        yAxis: { type: 'value', min: 0, max: 100, interval: 25, ...axis(T), axisLabel: { color: T.fg3, fontSize: 10.5 * fs(), formatter: v => v + '%' } },
+        series: order.map((id) => ({ name: OL[id][0], type: 'line', stack: 'p', smooth: 0.35, symbol: 'circle', symbolSize: id === 'bull' ? 0 : 5, showSymbol: true, itemStyle: { color: shade(C[id], 0.25), borderColor: T.surface, borderWidth: 1.5 }, data: H.map(h => h.probabilities[id] || 0),
+          lineStyle: { width: 1.2, color: T.surface }, areaStyle: { color: grad(C[id]), opacity: .92 }, emphasis: { focus: 'series', areaStyle: { opacity: 1 } }, blur: { areaStyle: { opacity: .25 } },
+        }))
+          // right-edge labels, each centred on its band at the latest run (overlaps nudged apart)
+          .concat([{ name: '_labels', type: 'scatter', silent: true, symbolSize: 0, tooltip: { show: false }, z: 11, labelLayout: { moveOverlap: 'shiftY' },
+            data: (() => { let acc = 0; const h = H[lastI]; return [{ value: [lastI, fall(h)], label: { show: true, position: 'right', distance: 12, formatter: `{w|Fall ≥10% ${fall(h)}%}`, rich: { w: { color: T.bg, backgroundColor: T.fg, fontSize: 10.5 * fs(), fontWeight: 700, fontFamily: T.mono, padding: [2, 5], borderRadius: 3 } } } }].concat(order.map(id => { const v = h.probabilities[id] || 0; const mid = acc + v / 2; acc += v; return { value: [lastI, mid], label: { show: true, position: 'right', distance: 12, formatter: `{n|${OL[id][0]}} {v|${v}%}`, rich: { n: { color: T.fg2, fontSize: 10.5 * fs(), fontFamily: T.mono }, v: { color: id === 'base' ? T.fg : C[id], fontSize: 11 * fs(), fontWeight: 700, fontFamily: T.mono } } } }; })); })() }])
+          // the downside line: a dot and its value for every daily run
+          .concat([{ name: 'P(fall ≥10%)', type: 'line', z: 10, smooth: 0.35, symbol: 'circle', symbolSize: (v, p) => (p.dataIndex === lastI ? 9 : 7), showSymbol: true, lineStyle: { color: T.fg, width: 2.2, shadowColor: 'rgba(0,0,0,.45)', shadowBlur: 6 }, itemStyle: { color: T.fg, borderColor: '#000', borderWidth: 2 },
+            label: { show: H.length <= 31, position: 'top', distance: 8, formatter: '{c}%', color: '#fff', fontFamily: T.mono, fontSize: 10.5 * fs(), fontWeight: 700, backgroundColor: 'rgba(0,0,0,.62)', padding: [2, 5], borderRadius: 4 }, labelLayout: { hideOverlap: true },
+            data: H.map(fall) }]),
       });
       // change table: current, vs previous run, vs start of the window, sparkline
       const spark = (vals, col) => { if (vals.length < 2) return '<span class="ol-sp"></span>'; const w = 72, h = 20, mn = Math.min(...vals), mx = Math.max(...vals), rg = mx - mn || 1; const pts = vals.map((v, i) => `${(i / (vals.length - 1) * w).toFixed(1)},${(h - 2 - (v - mn) / rg * (h - 4)).toFixed(1)}`); const last = pts[pts.length - 1].split(','); return `<svg class="ol-sp" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true"><polyline points="${pts.join(' ')}" fill="none" stroke="${col}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${last[0]}" cy="${last[1]}" r="2.4" fill="${col}"/></svg>`; };
