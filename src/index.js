@@ -85,7 +85,7 @@ async function handleApi(request, env, url) {
       const h = await getHistory(ctx, id);
       const days = WINDOWS[url.searchParams.get('window') || ''] || null;
       const pts = days ? A.windowSlice(h.points, days) : h.points;
-      return wrap({ id, source: h.source, freshness: h.freshness, stale: h.stale, error: h.error || null, coverageNote: h.coverageNote || null, from: pts[0] ? pts[0][0] : null, to: pts.length ? pts[pts.length - 1][0] : null, n: pts.length, points: pts, volumes: h.volumes ? A.windowSlice(h.volumes, days || 1e9) : undefined, marketCaps: h.marketCaps ? A.windowSlice(h.marketCaps, days || 1e9) : undefined });
+      return wrap({ id, source: h.source, freshness: h.freshness, stale: h.stale, error: h.error || null, coverageNote: h.coverageNote || null, from: pts[0] ? pts[0][0] : null, to: pts.length ? pts[pts.length - 1][0] : null, n: pts.length, points: pts, volumes: h.volumes ? (days ? A.windowSlice(h.volumes, days) : h.volumes) : undefined, marketCaps: h.marketCaps ? (days ? A.windowSlice(h.marketCaps, days) : h.marketCaps) : undefined });
     }
 
     if (p === '/performance') return wrap({ rows: await A.performance(ctx, parseIds(url, null)) });

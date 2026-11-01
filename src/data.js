@@ -44,25 +44,34 @@ function finalize(asset, res, extra = {}) {
 // Persisted history snapshots (written by the daily cron) serve cold instances without a round-trip to the
 // upstream source. A snapshot older than 36 hours is ignored so a dead cron cannot freeze the data.
 const SNAP_MAX_AGE = 36 * 36e5;
+// Stored copies of each history (written by the nightly job) protect against a source that is down or rate-limited.
+// The live source is always tried first; a stored copy is used only when it fails. A very recent copy (under 3 hours)
+// is also used on a cold start to spare the upstream source, except when the nightly job refreshes the copies.
+// (Previously a copy under 36 hours was always preferred, so the nightly job re-saved the same data and histories froze.)
+const SNAP_FRESH = 3 * 36e5;
 async function withSnapshot(ctx, key, loader) {
   const store = ctx.env && ctx.env.__store;
   return async () => {
+    let snap = null;
     if (store && store.persistent) {
-      try { const snap = await store.getJSON('hist/' + key, { maxAgeMs: 10 * 60e3 }); if (snap && snap.savedAt && Date.now() - new Date(snap.savedAt).getTime() < SNAP_MAX_AGE) return { ...snap.data, fromSnapshot: snap.savedAt }; } catch (e) { /* fall through */ }
+      try { snap = await store.getJSON('hist/' + key, { maxAgeMs: 10 * 60e3 }); } catch (e) { snap = null; }
+      if (!ctx.forceFresh && snap && snap.savedAt && Date.now() - new Date(snap.savedAt).getTime() < SNAP_FRESH) return { ...snap.data, fromSnapshot: snap.savedAt };
     }
-    return loader();
+    try { return await loader(); }
+    catch (e) { if (snap && snap.data) return { ...snap.data, fromSnapshot: snap.savedAt, snapshotReason: e.message }; throw e; }
   };
 }
 /** Write the current histories of every instrument to the store (called by the daily cron). */
 export async function persistHistories(ctx) {
   const store = ctx.env && ctx.env.__store; if (!store || !store.persistent) return { skipped: 'no persistent store' };
+  ctx = { ...ctx, forceFresh: true }; // fetch from the sources, never from the stored copies being replaced
   let n = 0, failed = 0;
   for (const a of ASSETS) {
     const src = a.history ? a.history.source : a.source; const sym = a.history ? a.history.symbol : a.symbol;
     const key = src === 'coingecko' ? `cg:${sym}:${ctx.config.keys.COINGECKO_API_KEY ? 'max' : 365}` : `${src}:${sym}`;
     try {
       const h = await getHistory(ctx, a.id);
-      if (!h.points.length || h.stale) { failed++; continue; }
+      if (!h.points.length || h.stale || h.fromSnapshot) { failed++; continue; }
       const data = src === 'coingecko' ? { points: h.points, marketCaps: h.marketCaps, volumes: h.volumes, source: 'coingecko', freshness: 'eod' } : src === 'fred' ? { points: h.rawPoints || h.points, source: 'fred', seriesId: sym, url: h.url } : { points: h.points, volumes: h.volumes, source: 'yahoo', freshness: 'eod', currency: 'USD' };
       await store.putJSON('hist/' + key, { savedAt: new Date().toISOString(), id: a.id, data }); n++;
     } catch (e) { failed++; }
@@ -81,7 +90,7 @@ export async function getHistory(ctx, id) {
 
   if (src === 'yahoo') {
     const r = await cache.resolve(`h:yahoo:${sym}`, config.ttl.history, await withSnapshot(ctx, `yahoo:${sym}`, () => yahoo.history(sym, '10y')));
-    return { id, points: r.data ? r.data.points : [], volumes: r.data ? r.data.volumes : [], source: 'yahoo', freshness: 'eod', stale: r.stale, error: r.error || null, fetchedAt: r.fetchedAt };
+    return { id, points: r.data ? r.data.points : [], volumes: r.data ? r.data.volumes : [], source: 'yahoo', freshness: 'eod', stale: r.stale, error: r.error || null, fetchedAt: r.fetchedAt, fromSnapshot: r.data && r.data.fromSnapshot || null };
   }
   if (src === 'fred') {
     const r = await cache.resolve(`h:fred:${sym}`, config.ttl.macro, await withSnapshot(ctx, `fred:${sym}`, () => fred.series(sym, { apiKey: config.keys.FRED_API_KEY, years: 12 })));
@@ -94,7 +103,7 @@ export async function getHistory(ctx, id) {
     const key = config.keys.COINGECKO_API_KEY;
     const days = key ? 'max' : 365;
     const r = await cache.resolve(`h:cg:${sym}:${days}`, Math.max(config.ttl.history, 1800), await withSnapshot(ctx, `cg:${sym}:${days}`, () => cg.marketChart(sym, key, days)));
-    return { id, points: r.data ? r.data.points : [], marketCaps: r.data ? r.data.marketCaps : [], volumes: r.data ? r.data.volumes : [], source: 'coingecko', freshness: 'eod', stale: r.stale, error: r.error || null, fetchedAt: r.fetchedAt, coverageNote: key ? null : 'CoinGecko free tier: 365 days max; add an API key in Admin for longer history' };
+    return { id, points: r.data ? r.data.points : [], marketCaps: r.data ? r.data.marketCaps : [], volumes: r.data ? r.data.volumes : [], source: 'coingecko', freshness: 'eod', stale: r.stale, error: r.error || null, fetchedAt: r.fetchedAt, fromSnapshot: r.data && r.data.fromSnapshot || null, coverageNote: key ? null : 'CoinGecko free tier: 365 days max; add an API key in Admin for longer history' };
   }
   throw new Error(`No history adapter for ${src}`);
 }
