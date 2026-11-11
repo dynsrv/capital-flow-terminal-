@@ -598,7 +598,7 @@
   function signalReading(sg) { const a = sg.analysis || {}; return `<div class="reading"><p class="hl">${esc(sg.type)} · ${esc(sg.name)}</p><p>${esc(a.meaning || sg.detail)}</p>${a.context ? `<p>${esc(a.context)}</p>` : ''}${a.watch ? `<div><div class="lab">${ic('compass')}What to watch</div><p>${esc(a.watch)}</p></div>` : ''}<p class="foot">${esc(a.note || '')}</p></div>`; }
   const sevIcon = { high: 'alert', elevated: 'alert', info: 'info' };
   function highlightItems(items, max) {
-    return (max ? items.slice(0, max) : items).map(h => `<div class="hl-item ${h.severity}"><span class="ico">${ic(h.icon && P[h.icon] ? h.icon : sevIcon[h.severity])}</span><b>${esc(h.title)}</b><p>${esc(h.text)}</p>${h.ids && h.ids.length ? `<div class="ids">${h.ids.filter(id => state.perf.some(q => q.id === id)).map(id => `<button type="button" data-open="${id}">${id}</button>`).join('')}</div>` : ''}</div>`).join('');
+    return (max ? items.slice(0, max) : items).map(h => `<div class="hl-item ${h.severity}"><span class="ico">${ic(h.icon && P[h.icon] ? h.icon : sevIcon[h.severity])}</span><div class="hl-c"><span class="hl-sev">${{ high: 'High', elevated: 'Elevated', info: 'Note' }[h.severity] || 'Note'}</span><b>${esc(h.title)}</b><p>${esc(h.text)}</p>${h.ids && h.ids.length ? `<div class="ids">${h.ids.filter(id => state.perf.some(q => q.id === id)).map(id => `<button type="button" data-open="${id}">${id}</button>`).join('')}</div>` : ''}</div></div>`).join('');
   }
   document.addEventListener('click', e => { const b = e.target.closest('[data-open]'); if (b) { e.stopPropagation(); openDrawer(b.dataset.open); } });
 

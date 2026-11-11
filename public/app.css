@@ -1763,3 +1763,15 @@ a.strip-seg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
 :root[data-theme="dark"] .bl-light, :root:not([data-theme]) .bl-light { display: none !important; }
 :root[data-theme="light"] .bl-dark { display: none !important; }
 @media (max-width: 760px) { .brand-logo { display: none; } .brand-mark { display: block; height: 26px; } }
+
+/* risk highlights: neutral cards; severity carried by a tinted icon tile and a small tag (no coloured side bar) */
+.hl-item { --sev: var(--c4); grid-template-columns: 38px minmax(0, 1fr); gap: 0 14px; padding: 16px; border: 1px solid var(--line); border-left-width: 1px; border-left-color: var(--line); border-radius: 12px; background: var(--surface-2); }
+.hl-item.high { --sev: var(--down); } .hl-item.elevated { --sev: var(--warn); } .hl-item.info { --sev: var(--c4); }
+.hl-item.high, .hl-item.elevated, .hl-item.info { border-left-color: var(--line); }
+.hl-item .ico { grid-row: auto; width: 38px; height: 38px; border-radius: 10px; color: var(--sev); background: color-mix(in srgb, var(--sev) 14%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sev) 28%, transparent); }
+.hl-item .ico svg.i { width: 19px; height: 19px; }
+.hl-c { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.hl-sev { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: calc(10px * var(--fs, 1)); font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--sev); }
+.hl-sev::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--sev); box-shadow: 0 0 0 3px color-mix(in srgb, var(--sev) 20%, transparent); }
+.hl-item:hover { border-color: var(--line-2); }
+@media (max-width: 760px) { .hl-item { grid-template-columns: 32px minmax(0, 1fr); gap: 0 12px; padding: 14px; } .hl-item .ico { width: 32px; height: 32px; border-radius: 9px; } }
