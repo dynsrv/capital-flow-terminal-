@@ -120,7 +120,7 @@ async function handleApi(request, env, url) {
     if (p === '/analytics/leaders') return wrap(await R.leaders(ctx, url.searchParams.get('anchor') || 'SPX'));
     if (p === '/intel/reading') return wrap(await getReading(ctx));
     if (p === '/news') { const [feed, curated] = await Promise.all([fetchNews(ctx), getCurated(ctx)]); return wrap({ ...feed, curated, aiCuration: (config.keys.NEWS_AI_CURATION || 'off') !== 'off', reader: config.keys.NEWS_READER === 'tab' ? 'tab' : 'drawer' }); }
-    if (p === '/news/read') { if (config.keys.NEWS_READER === 'tab') return error('The news reader is turned off.', 404); try { return wrap({ article: await readArticle(ctx, url.searchParams.get('u')) }); } catch (e) { return error(e.message, e.status || 502); } }
+    if (p === '/news/read') { if (config.keys.NEWS_READER === 'tab' && (await roleOf(request, env, url)) !== 'admin') return error('The news reader is turned off.', 404); try { return wrap({ article: await readArticle(ctx, url.searchParams.get('u')) }); } catch (e) { return error(e.message, e.status || 502); } }
     if (p === '/tv/channels' || p === '/tv/streams') return wrap(await getChannels(ctx));
     // Live TV relay streams through our function (bandwidth we pay for): members and admin only. Direct streams need no relay.
     if (p === '/hls') { const who = await roleOf(request, env, url); if (!canLive(who)) return new Response('Live TV relay is for members. Sign in with your PIN.', { status: 403, headers: CORS }); return hlsRelay(ctx, request, url); }
