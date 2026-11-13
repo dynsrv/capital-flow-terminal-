@@ -342,3 +342,12 @@ Data is for information only and not investment advice. Check each provider's te
 - Retention (nightly): daily snapshots and daily usage 400 days, outlook archive 730 days, AI reading archive newest 120. Price histories and settings are kept.
 - Admin → Data & storage shows the store, cache, documents and bytes by area, retention, last runs, and has Download backup / Restore backup (credentials and member PINs are excluded).
 - The browser keeps a service worker (`/sw.js`): the app shell opens instantly, and public API reads fall back to the last good answer when the network fails (the page says so). Live prices, admin, sign-in and the TV relay are never cached.
+
+## News reader
+
+Admin → API keys → AI → **News reader**: `drawer` (default) or `tab`.
+
+- `drawer`: clicking a headline (side news, Flows credit news) opens a read-only reader drawer. The server (`GET /api/news/read?u=<headline link>`) resolves Google News links to the publisher, fetches the page once, runs Mozilla Readability (via linkedom) and returns plain blocks: headings, paragraphs, lists, quotes, images. The client renders them as text: no publisher scripts, styles, ads or links. Font size A−/A+ is remembered per browser; "Original" opens the publisher page. Cmd/Ctrl-click still opens a new tab.
+- Only headlines the site is currently showing can be opened (not an open proxy); public hosts only. Results are cached 6 hours, nothing is stored permanently.
+- Paywalled or blocked publishers (e.g. Bloomberg, WSJ) are not bypassed: the reader shows the summary and a "Read on …" button.
+- `tab`: headlines open the publisher page in a new tab, as before.
