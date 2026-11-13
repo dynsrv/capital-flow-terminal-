@@ -11,8 +11,10 @@
     "check": "node local/check.mjs"
   },
   "dependencies": {
+    "@mozilla/readability": "0.6.0",
     "@neondatabase/serverless": "^1.0.2",
-    "@vercel/blob": "^2.8.2"
+    "@vercel/blob": "^2.8.2",
+    "linkedom": "0.18.9"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"

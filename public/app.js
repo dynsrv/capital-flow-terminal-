@@ -484,9 +484,60 @@
     html += `<div class="news-foot">${hasAI ? `AI curation ${fmt.ago(d.curated.curatedAt)} (${esc(d.curated.model)})${d.curated.themes && d.curated.themes.length ? ' · themes: ' + esc(d.curated.themes.join(', ')) : ''}. ` : ''}${d.sources ? `${d.sources.length - failed.length}/${d.sources.length} feeds` : ''}${failed.length ? ` · unavailable: ${esc(failed.join(', '))}` : ''}. Headlines are public RSS; opening a story leaves this site.</div>`;
     box.innerHTML = html;
   }
+  /* ───────── news reader drawer ─────────
+     When Admin sets the news reader to "drawer", headlines open here as a clean, read-only article (text, headings,
+     lists, quotes and images only, rendered as text), with a link to the original. "tab" keeps opening the publisher
+     page in a new tab. The snapshot artifact without a live API also keeps the old behaviour. */
+  const RD_FS = [15, 16, 17, 18, 20, 22];
+  let rdSize = (() => { try { const v = Number(localStorage.getItem('cft:rd-fs')); return RD_FS.includes(v) ? v : 17; } catch (e) { return 17; } })();
+  let rdReq = 0, rdLast = null;
+  function readerEnabled() { return state.readerMode === 'drawer' && !(SNAP && !apiBase); }
+  function readerEl() {
+    let el = $('#reader'); if (el) return el;
+    el = document.createElement('div'); el.id = 'reader'; el.hidden = true;
+    el.innerHTML = `<div class="rd-scrim" data-rd-close></div><aside class="rd" role="dialog" aria-modal="true" aria-labelledby="rd-title"><header class="rd-bar"><div class="rd-src" id="rd-src"></div><div class="rd-tools"><button type="button" class="rd-btn" data-rd-fs="-1" aria-label="Smaller text">A−</button><button type="button" class="rd-btn" data-rd-fs="1" aria-label="Larger text">A+</button><a class="rd-btn rd-orig" id="rd-orig" target="_blank" rel="noopener" href="#">${ic('external')}<span>Original</span></a><button type="button" class="rd-btn rd-x" data-rd-close aria-label="Close reader">${ic('x')}</button></div></header><div class="rd-body" id="rd-body" tabindex="-1"></div></aside>`;
+    document.body.appendChild(el);
+    el.addEventListener('click', (e) => { if (e.target.closest('[data-rd-close]')) closeReader(); const f = e.target.closest('[data-rd-fs]'); if (f) { const i = RD_FS.indexOf(rdSize) + Number(f.dataset.rdFs); rdSize = RD_FS[Math.max(0, Math.min(RD_FS.length - 1, i))]; try { localStorage.setItem('cft:rd-fs', rdSize); } catch (x) {} el.style.setProperty('--rd-fs', rdSize + 'px'); } });
+    return el;
+  }
+  function closeReader() { const el = $('#reader'); if (!el || el.hidden) return; el.classList.remove('on'); document.body.classList.remove('rd-open'); setTimeout(() => { el.hidden = true; }, 180); rdReq++; if (history.state && history.state.reader) history.back(); if (rdLast) try { rdLast.focus(); } catch (e) {} }
+  window.addEventListener('popstate', () => { const el = $('#reader'); if (el && !el.hidden) { el.classList.remove('on'); document.body.classList.remove('rd-open'); setTimeout(() => { el.hidden = true; }, 180); } });
+  document.addEventListener('keydown', (e) => { const el = $('#reader'); if (e.key === 'Escape' && el && !el.hidden) { e.stopImmediatePropagation(); closeReader(); } }, true);
+  const rdBlocks = (blocks) => blocks.map(b => b.t === 'h' ? `<h${b.level + 1}>${esc(b.text)}</h${b.level + 1}>` : b.t === 'p' ? `<p>${esc(b.text)}</p>` : b.t === 'quote' ? `<blockquote>${esc(b.text)}</blockquote>` : b.t === 'list' ? `<${b.ordered ? 'ol' : 'ul'}>${b.items.map(x => `<li>${esc(x)}</li>`).join('')}</${b.ordered ? 'ol' : 'ul'}>` : b.t === 'img' ? `<figure><img src="${esc(b.src)}" alt="${esc(b.alt || '')}" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest('figure').remove()">${b.caption ? `<figcaption>${esc(b.caption)}</figcaption>` : ''}</figure>` : '').join('');
+  async function openReader(link, hint = {}) {
+    const el = readerEl(); const body = $('#rd-body'); const my = ++rdReq; rdLast = document.activeElement;
+    el.style.setProperty('--rd-fs', rdSize + 'px');
+    $('#rd-src').innerHTML = `<b>${esc(hint.source || '')}</b>${hint.publishedAt ? `<span>${fmt.ago(hint.publishedAt)}</span>` : ''}`;
+    $('#rd-orig').href = link;
+    body.innerHTML = `<article class="rd-a"><h1 id="rd-title">${esc(hint.title || '')}</h1><div class="rd-sk"><i></i><i></i><i style="width:82%"></i><i></i><i style="width:64%"></i></div><p class="xs muted">Opening a clean, read-only version of this article…</p></article>`;
+    el.hidden = false; requestAnimationFrame(() => el.classList.add('on')); document.body.classList.add('rd-open'); body.scrollTop = 0;
+    if (!(history.state && history.state.reader)) history.pushState({ reader: true }, '');
+    setTimeout(() => body.focus({ preventScroll: true }), 50);
+    try {
+      const { article: a } = await api('/news/read?u=' + encodeURIComponent(link));
+      if (my !== rdReq) return;
+      $('#rd-orig').href = a.url || link;
+      $('#rd-src').innerHTML = `<b>${esc(a.site || a.source || hint.source || '')}</b>${a.publishedAt || a.published ? `<span>${fmt.ago(a.published || a.publishedAt)}</span>` : ''}`;
+      const metaBits = [a.author ? esc(a.author) : '', a.published ? esc(new Date(a.published).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })) : '', a.minutes ? `${a.minutes} min read` : ''].filter(Boolean);
+      const hero = a.image && !a.blocked ? `<figure class="rd-hero"><img src="${esc(a.image)}" alt="" referrerpolicy="no-referrer" onerror="this.closest('figure').remove()"></figure>` : '';
+      const limited = a.partial ? `<div class="rd-limit">${ic('info')}<div><b>${a.blocked ? 'This publisher does not allow its articles to be read outside its site.' : 'Only part of this article is available outside the publisher’s site.'}</b><p>${a.excerpt ? esc(a.excerpt) : 'Open the original to read it in full.'}</p><a class="btn" href="${esc(a.url || link)}" target="_blank" rel="noopener">${ic('external')}Read on ${esc(a.site || 'the publisher')}</a></div></div>` : '';
+      body.innerHTML = `<article class="rd-a" lang="${esc(a.lang || '')}"><h1 id="rd-title">${esc(a.title || a.headline)}</h1>${metaBits.length ? `<div class="rd-meta">${metaBits.join('<i>·</i>')}</div>` : ''}${hero}${limited}${a.partial ? '' : rdBlocks(a.blocks || [])}<footer class="rd-foot">Read-only view of <a href="${esc(a.url || link)}" target="_blank" rel="noopener">${esc(a.site || 'the original article')} ${ic('external')}</a>. Text and images belong to the publisher; ads, scripts and links are removed for reading.</footer></article>`;
+    } catch (e) {
+      if (my !== rdReq) return;
+      body.innerHTML = `<article class="rd-a"><h1 id="rd-title">${esc(hint.title || '')}</h1><div class="rd-limit">${ic('alert')}<div><b>This article could not be opened in the reader.</b><p>${esc(e.message)}</p><a class="btn" href="${esc(link)}" target="_blank" rel="noopener">${ic('external')}Open the original</a></div></div></article>`;
+    }
+  }
+  // Headlines (side news, Flows credit news) open in the reader when it is on; modifier-clicks keep the browser behaviour.
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('a.news-item, a.cm-n'); if (!a || !readerEnabled()) return;
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    const it = ((state.news.data && state.news.data.items) || []).find(x => x.link === a.getAttribute('href')) || {};
+    openReader(a.getAttribute('href'), { title: it.title || (a.querySelector('.nt, .cm-nt') || {}).textContent, source: it.source || (a.querySelector('.src, .cm-ns') || {}).textContent, publishedAt: it.publishedAt });
+  });
   async function loadNews(force = false) {
     const n = state.news; const meta = $('#news-meta');
-    try { const d = await api('/news' + (force ? '?t=' + Date.now() : '')); n.data = d; meta.textContent = `${d.items.length} · ${fmt.ago(d.asOf)}`; drawNews(); }
+    try { const d = await api('/news' + (force ? '?t=' + Date.now() : '')); n.data = d; state.readerMode = d.reader || 'tab'; meta.textContent = `${d.items.length} · ${fmt.ago(d.asOf)}`; drawNews(); }
     catch (e) { if (!n.data) $('#news-list').innerHTML = errorBox(SNAP && !apiBase ? 'Headlines are not part of the embedded snapshot. Connect the live API to load them.' : e.message); }
   }
   $('#news-region').onclick = e => { const b = e.target.closest('button'); if (!b) return; state.news.region = b.dataset.v; $$('#news-region button').forEach(x => x.classList.toggle('active', x === b)); drawNews(); };

@@ -6,6 +6,7 @@ import { json, error, WINDOWS } from './lib/util.js';
 import { ASSETS, CLASSES, SIZE_REFERENCES } from './universe.js';
 import { getQuotes, getHistory, getSizes, SOURCES, persistHistories } from './data.js';
 import * as STG from './storage.js';
+import { readArticle } from './newsreader.js';
 import * as A from './analytics.js';
 import { flows } from './flows.js';
 import { intelligence } from './ai.js';
@@ -118,7 +119,8 @@ async function handleApi(request, env, url) {
     if (p === '/risk/trend') return wrap(await R.trend(ctx, url.searchParams.get('id') || 'SPX', url.searchParams.get('window') || '1Y'));
     if (p === '/analytics/leaders') return wrap(await R.leaders(ctx, url.searchParams.get('anchor') || 'SPX'));
     if (p === '/intel/reading') return wrap(await getReading(ctx));
-    if (p === '/news') { const [feed, curated] = await Promise.all([fetchNews(ctx), getCurated(ctx)]); return wrap({ ...feed, curated, aiCuration: (config.keys.NEWS_AI_CURATION || 'off') !== 'off' }); }
+    if (p === '/news') { const [feed, curated] = await Promise.all([fetchNews(ctx), getCurated(ctx)]); return wrap({ ...feed, curated, aiCuration: (config.keys.NEWS_AI_CURATION || 'off') !== 'off', reader: config.keys.NEWS_READER === 'tab' ? 'tab' : 'drawer' }); }
+    if (p === '/news/read') { if (config.keys.NEWS_READER === 'tab') return error('The news reader is turned off.', 404); try { return wrap({ article: await readArticle(ctx, url.searchParams.get('u')) }); } catch (e) { return error(e.message, e.status || 502); } }
     if (p === '/tv/channels' || p === '/tv/streams') return wrap(await getChannels(ctx));
     // Live TV relay streams through our function (bandwidth we pay for): members and admin only. Direct streams need no relay.
     if (p === '/hls') { const who = await roleOf(request, env, url); if (!canLive(who)) return new Response('Live TV relay is for members. Sign in with your PIN.', { status: 403, headers: CORS }); return hlsRelay(ctx, request, url); }
