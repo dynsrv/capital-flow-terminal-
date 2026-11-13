@@ -495,13 +495,17 @@
   function readerEl() {
     let el = $('#reader'); if (el) return el;
     el = document.createElement('div'); el.id = 'reader'; el.hidden = true;
-    el.innerHTML = `<div class="rd-scrim" data-rd-close></div><aside class="rd" role="dialog" aria-modal="true" aria-labelledby="rd-title"><header class="rd-bar"><div class="rd-src" id="rd-src"></div><div class="rd-tools"><button type="button" class="rd-btn" data-rd-fs="-1" aria-label="Smaller text">A−</button><button type="button" class="rd-btn" data-rd-fs="1" aria-label="Larger text">A+</button><a class="rd-btn rd-orig" id="rd-orig" target="_blank" rel="noopener" href="#">${ic('external')}<span>Original</span></a><button type="button" class="rd-btn rd-x" data-rd-close aria-label="Close reader">${ic('x')}</button></div></header><div class="rd-body" id="rd-body" tabindex="-1"></div></aside>`;
+    el.innerHTML = `<div class="rd-scrim" data-rd-close></div><aside class="rd" role="dialog" aria-modal="true" aria-labelledby="rd-title"><span class="rd-grab" aria-hidden="true"></span><header class="rd-bar"><div class="rd-src" id="rd-src"></div><div class="rd-tools"><button type="button" class="rd-btn" data-rd-fs="-1" aria-label="Smaller text">A−</button><button type="button" class="rd-btn" data-rd-fs="1" aria-label="Larger text">A+</button><a class="rd-btn rd-orig" id="rd-orig" target="_blank" rel="noopener" href="#">${ic('external')}<span>Original</span></a><button type="button" class="rd-btn rd-x" data-rd-close aria-label="Close reader">${ic('x')}</button></div></header><div class="rd-body" id="rd-body" tabindex="-1"></div></aside>`;
     document.body.appendChild(el);
     el.addEventListener('click', (e) => { if (e.target.closest('[data-rd-close]')) closeReader(); const f = e.target.closest('[data-rd-fs]'); if (f) { const i = RD_FS.indexOf(rdSize) + Number(f.dataset.rdFs); rdSize = RD_FS[Math.max(0, Math.min(RD_FS.length - 1, i))]; try { localStorage.setItem('cft:rd-fs', rdSize); } catch (x) {} el.style.setProperty('--rd-fs', rdSize + 'px'); } });
     return el;
   }
-  function closeReader() { const el = $('#reader'); if (!el || el.hidden) return; el.classList.remove('on'); document.body.classList.remove('rd-open'); setTimeout(() => { el.hidden = true; }, 180); rdReq++; if (history.state && history.state.reader) history.back(); if (rdLast) try { rdLast.focus(); } catch (e) {} }
-  window.addEventListener('popstate', () => { const el = $('#reader'); if (el && !el.hidden) { el.classList.remove('on'); document.body.classList.remove('rd-open'); setTimeout(() => { el.hidden = true; }, 180); } });
+  // Open/close: the panel and scrim animate on transform/opacity only (GPU-friendly); the element is hidden after the
+  // closing transition ends, so opening and closing run at the same speed and never cut off mid-animation.
+  let rdHideT = 0;
+  function rdHide(el) { el.classList.remove('on'); el.classList.add('closing'); document.body.classList.remove('rd-open'); clearTimeout(rdHideT); rdHideT = setTimeout(() => { el.hidden = true; el.classList.remove('closing'); const pnl = el.querySelector('.rd'); if (pnl) pnl.style.transform = ''; }, 340); }
+  function closeReader() { const el = $('#reader'); if (!el || el.hidden || el.classList.contains('closing')) return; rdHide(el); rdReq++; if (history.state && history.state.reader) history.back(); if (rdLast) try { rdLast.focus({ preventScroll: true }); } catch (e) {} }
+  window.addEventListener('popstate', () => { const el = $('#reader'); if (el && !el.hidden && !el.classList.contains('closing')) { rdHide(el); rdReq++; } });
   document.addEventListener('keydown', (e) => { const el = $('#reader'); if (e.key === 'Escape' && el && !el.hidden) { e.stopImmediatePropagation(); closeReader(); } }, true);
   const rdBlocks = (blocks) => blocks.map(b => b.t === 'h' ? `<h${b.level + 1}>${esc(b.text)}</h${b.level + 1}>` : b.t === 'p' ? `<p>${esc(b.text)}</p>` : b.t === 'quote' ? `<blockquote>${esc(b.text)}</blockquote>` : b.t === 'list' ? `<${b.ordered ? 'ol' : 'ul'}>${b.items.map(x => `<li>${esc(x)}</li>`).join('')}</${b.ordered ? 'ol' : 'ul'}>` : b.t === 'img' ? `<figure><img src="${esc(b.src)}" alt="${esc(b.alt || '')}" loading="lazy" referrerpolicy="no-referrer" onerror="this.closest('figure').remove()">${b.caption ? `<figcaption>${esc(b.caption)}</figcaption>` : ''}</figure>` : '').join('');
   async function openReader(link, hint = {}) {
@@ -510,7 +514,8 @@
     $('#rd-src').innerHTML = `<b>${esc(hint.source || '')}</b>${hint.publishedAt ? `<span>${fmt.ago(hint.publishedAt)}</span>` : ''}`;
     $('#rd-orig').href = link;
     body.innerHTML = `<article class="rd-a"><h1 id="rd-title">${esc(hint.title || '')}</h1><div class="rd-sk"><i></i><i></i><i style="width:82%"></i><i></i><i style="width:64%"></i></div><p class="xs muted">Opening a clean, read-only version of this article…</p></article>`;
-    el.hidden = false; requestAnimationFrame(() => el.classList.add('on')); document.body.classList.add('rd-open'); body.scrollTop = 0;
+    clearTimeout(rdHideT); el.classList.remove('closing'); el.hidden = false; body.scrollTop = 0; document.body.classList.add('rd-open');
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('on'))); // two frames so the start state is painted first
     if (!(history.state && history.state.reader)) history.pushState({ reader: true }, '');
     setTimeout(() => body.focus({ preventScroll: true }), 50);
     try {
@@ -521,12 +526,19 @@
       const metaBits = [a.author ? esc(a.author) : '', a.published ? esc(new Date(a.published).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' })) : '', a.minutes ? `${a.minutes} min read` : ''].filter(Boolean);
       const hero = a.image && !a.blocked ? `<figure class="rd-hero"><img src="${esc(a.image)}" alt="" referrerpolicy="no-referrer" onerror="this.closest('figure').remove()"></figure>` : '';
       const limited = a.partial ? `<div class="rd-limit">${ic('info')}<div><b>${a.blocked ? 'This publisher does not allow its articles to be read outside its site.' : 'Only part of this article is available outside the publisher’s site.'}</b><p>${a.excerpt ? esc(a.excerpt) : 'Open the original to read it in full.'}</p><a class="btn" href="${esc(a.url || link)}" target="_blank" rel="noopener">${ic('external')}Read on ${esc(a.site || 'the publisher')}</a></div></div>` : '';
-      body.innerHTML = `<article class="rd-a" lang="${esc(a.lang || '')}"><h1 id="rd-title">${esc(a.title || a.headline)}</h1>${metaBits.length ? `<div class="rd-meta">${metaBits.join('<i>·</i>')}</div>` : ''}${hero}${limited}${a.partial ? '' : rdBlocks(a.blocks || [])}<footer class="rd-foot">Read-only view of <a href="${esc(a.url || link)}" target="_blank" rel="noopener">${esc(a.site || 'the original article')} ${ic('external')}</a>. Text and images belong to the publisher; ads, scripts and links are removed for reading.</footer></article>`;
+      body.innerHTML = `<article class="rd-a rd-in" lang="${esc(a.lang || '')}"><h1 id="rd-title">${esc(a.title || a.headline)}</h1>${metaBits.length ? `<div class="rd-meta">${metaBits.join('<i>·</i>')}</div>` : ''}${hero}${limited}${a.partial ? '' : rdBlocks(a.blocks || [])}<footer class="rd-foot">Read-only view of <a href="${esc(a.url || link)}" target="_blank" rel="noopener">${esc(a.site || 'the original article')} ${ic('external')}</a>. Text and images belong to the publisher; ads, scripts and links are removed for reading.</footer></article>`;
     } catch (e) {
       if (my !== rdReq) return;
       body.innerHTML = `<article class="rd-a"><h1 id="rd-title">${esc(hint.title || '')}</h1><div class="rd-limit">${ic('alert')}<div><b>This article could not be opened in the reader.</b><p>${esc(e.message)}</p><a class="btn" href="${esc(link)}" target="_blank" rel="noopener">${ic('external')}Open the original</a></div></div></article>`;
     }
   }
+  // Mobile: drag the sheet down by its top bar (or from the top of the article) to close it.
+  (function rdSwipe() {
+    let y0 = null, dy = 0, pnl = null, t0 = 0;
+    document.addEventListener('touchstart', (e) => { const el = $('#reader'); if (!el || el.hidden || window.innerWidth > 760) return; const bar = e.target.closest('.rd-bar, .rd-grab'); const body = $('#rd-body'); if (!bar && !(e.target.closest('#rd-body') && body.scrollTop <= 0)) return; if (e.target.closest('button, a')) return; y0 = e.touches[0].clientY; dy = 0; t0 = Date.now(); pnl = el.querySelector('.rd'); pnl.style.transition = 'none'; }, { passive: true });
+    document.addEventListener('touchmove', (e) => { if (y0 == null || !pnl) return; dy = Math.max(0, e.touches[0].clientY - y0); if (dy > 0) pnl.style.transform = `translate3d(0, ${dy}px, 0)`; }, { passive: true });
+    document.addEventListener('touchend', () => { if (y0 == null || !pnl) return; const fast = dy > 60 && Date.now() - t0 < 250; pnl.style.transition = ''; if (dy > 140 || fast) closeReader(); else pnl.style.transform = ''; y0 = null; pnl = null; }, { passive: true });
+  })();
   // Headlines (side news, Flows credit news) open in the reader when it is on; modifier-clicks keep the browser behaviour.
   document.addEventListener('click', (e) => {
     const a = e.target.closest('a.news-item, a.cm-n'); if (!a || !readerEnabled()) return;

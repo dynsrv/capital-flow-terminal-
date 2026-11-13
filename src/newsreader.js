@@ -66,12 +66,13 @@ async function resolveGoogle(u) {
 // ── HTML → plain blocks ──
 const clean = (s) => String(s || '').replace(/\[(?:Gambas|Embed|Video|Baca juga)[^\]]*\]/gi, '').replace(/ /g, ' ').replace(/[ \t\r\f\v]+/g, ' ').replace(/\s*\n\s*/g, ' ').trim();
 const absUrl = (src, base) => { try { const x = new URL(src, base); return /^https?:$/.test(x.protocol) ? x.href : null; } catch (e) { return null; } };
-const BOILER = /^(advertisement|iklan|scroll to continue|baca juga|read more|related|share this|subscribe|sign up)\b/i;
+const BOILER = /^(advertisement|iklan|scroll to continue|baca juga|read more|related|share this|subscribe|sign up|updated \d+ (minutes?|hours?|days?) ago|published \d+ (minutes?|hours?|days?) ago)\b/i;
+const BYLINE = /^by\s?[A-Z][^.]{0,90}$/;
 
 function toBlocks(html, base) {
   const { document } = parseHTML(`<!doctype html><html><body><div id="r">${html}</div></body></html>`);
   const out = []; const seenImg = new Set();
-  const push = (b) => { if (b.text != null && (!b.text || BOILER.test(b.text) || /^\([a-z0-9/.,\s-]{1,24}\)$/i.test(b.text))) return; out.push(b); };
+  const push = (b) => { if (b.text != null && (!b.text || BOILER.test(b.text) || (out.length < 4 && BYLINE.test(b.text)) || /^\([a-z0-9/.,\s-]{1,24}\)$/i.test(b.text))) return; out.push(b); };
   const walk = (el) => {
     for (const n of el.childNodes) {
       if (n.nodeType !== 1) { if (n.nodeType === 3 && clean(n.textContent).length > 40 && el.id === 'r') push({ t: 'p', text: clean(n.textContent) }); continue; }
@@ -136,7 +137,7 @@ export async function readArticle(ctx, link) {
   if (!link || !publicUrl(link)) throw Object.assign(new Error('Not a valid article link.'), { status: 400 });
   const item = await known(ctx, link);
   if (!item) throw Object.assign(new Error('Only headlines shown on this site can open in the reader.'), { status: 404 });
-  const r = await ctx.cache.resolve('reader:' + link, TTL, async () => {
+  const r = await ctx.cache.resolve('reader2:' + link, TTL, async () => {
     const target = await resolveGoogle(link);
     if (!publicUrl(target)) throw new Error('The article address is not a public web page.');
     try { return await extract(target); }
