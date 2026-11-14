@@ -68,11 +68,14 @@ const clean = (s) => String(s || '').replace(/\[(?:Gambas|Embed|Video|Baca juga)
 const absUrl = (src, base) => { try { const x = new URL(src, base); return /^https?:$/.test(x.protocol) ? x.href : null; } catch (e) { return null; } };
 const BOILER = /^(advertisement|iklan|scroll to continue|baca juga|read more|related|share this|subscribe|sign up|updated \d+ (minutes?|hours?|days?) ago|published \d+ (minutes?|hours?|days?) ago)\b/i;
 const BYLINE = /^by\s?[A-Z][^.]{0,90}$/;
+const FOLLOW = /(you're|you are) currently following this author|click to (un)?subscribe from email alerts|follow (this )?author/i;
+// Same picture at different sizes or CDN variants → one key (path without query, size tokens and extension).
+export const imgKey = (u) => { try { const x = new URL(u); let k = decodeURIComponent(x.pathname).toLowerCase(); const inner = k.match(/https?:\/\/.+$/); if (inner) k = new URL(inner[0]).pathname.toLowerCase(); return k.replace(/\/(w|h|c|q|f|fit|crop|resize|width|height)[_=,:][^/]*/g, '/').replace(/[-_.@]?\d{2,4}x\d{2,4}/g, '').replace(/[-_]?(small|medium|large|thumb|thumbnail|scaled|original)(?=\.|$)/g, '').replace(/(\.(jpe?g|png|webp|avif|gif))+$/, '').replace(/\/(\d{3,4})(?=\/)/g, '/').replace(/\/+/g, '/'); } catch (e) { return u; } };
 
 function toBlocks(html, base) {
   const { document } = parseHTML(`<!doctype html><html><body><div id="r">${html}</div></body></html>`);
   const out = []; const seenImg = new Set();
-  const push = (b) => { if (b.text != null && (!b.text || BOILER.test(b.text) || (out.length < 4 && BYLINE.test(b.text)) || /^\([a-z0-9/.,\s-]{1,24}\)$/i.test(b.text))) return; out.push(b); };
+  const push = (b) => { if (b.text != null && (!b.text || BOILER.test(b.text) || (out.length < 4 && BYLINE.test(b.text)) || FOLLOW.test(b.text) || /^\([a-z0-9/.,\s-]{1,24}\)$/i.test(b.text))) return; out.push(b); };
   const walk = (el) => {
     for (const n of el.childNodes) {
       if (n.nodeType !== 1) { if (n.nodeType === 3 && clean(n.textContent).length > 40 && el.id === 'r') push({ t: 'p', text: clean(n.textContent) }); continue; }
@@ -90,8 +93,8 @@ function toBlocks(html, base) {
   };
   const img = (i, caption) => {
     const src = absUrl(i.getAttribute('src') || i.getAttribute('data-src') || (i.getAttribute('srcset') || '').split(/\s+/)[0], base);
-    if (!src || seenImg.has(src) || /\.(svg|gif)(\?|$)/i.test(src) || /pixel|tracking|logo|avatar|icon/i.test(src)) return;
-    seenImg.add(src); out.push({ t: 'img', src, alt: clean(i.getAttribute('alt')), caption: caption || '' });
+    if (!src || seenImg.has(imgKey(src)) || /\.(svg|gif)(\?|$)/i.test(src) || /pixel|tracking|logo|avatar|icon/i.test(src)) return;
+    seenImg.add(imgKey(src)); out.push({ t: 'img', src, alt: clean(i.getAttribute('alt')), caption: caption || '' });
   };
   walk(document.getElementById('r'));
   // merge duplicates and drop trailing boilerplate
@@ -118,7 +121,10 @@ async function extract(url) {
   let art = null; try { art = new Readability(document, { charThreshold: 300, keepClasses: false }).parse(); } catch (e) { art = null; }
   const blocks = art && art.content ? toBlocks(art.content, base) : [];
   const words = blocks.reduce((t, b) => t + (b.text ? b.text.split(/\s+/).length : b.items ? b.items.join(' ').split(/\s+/).length : 0), 0);
-  if (info.image && blocks.length && blocks[0].t === 'img' && blocks[0].src === info.image) blocks.shift();
+  // the lead (og:image) is shown as the hero, so drop any copy of it from the body
+  if (info.image) { const hk = imgKey(info.image); for (let k = blocks.length - 1; k >= 0; k--) if (blocks[k].t === 'img' && imgKey(blocks[k].src) === hk) blocks.splice(k, 1); }
+  // and if the body starts with a picture while the page has no og:image, promote it to the hero
+  if (!info.image && blocks[0] && blocks[0].t === 'img') info.image = blocks.shift().src;
   return {
     ...info, title: (art && art.title) || info.title, author: clean((art && art.byline) || info.author), site: clean((art && art.siteName) || info.site),
     published: (art && art.publishedTime) || info.published, excerpt: clean((art && art.excerpt) || info.description),
@@ -137,7 +143,7 @@ export async function readArticle(ctx, link) {
   if (!link || !publicUrl(link)) throw Object.assign(new Error('Not a valid article link.'), { status: 400 });
   const item = await known(ctx, link);
   if (!item) throw Object.assign(new Error('Only headlines shown on this site can open in the reader.'), { status: 404 });
-  const r = await ctx.cache.resolve('reader2:' + link, TTL, async () => {
+  const r = await ctx.cache.resolve('reader3:' + link, TTL, async () => {
     const target = await resolveGoogle(link);
     if (!publicUrl(target)) throw new Error('The article address is not a public web page.');
     try { return await extract(target); }
