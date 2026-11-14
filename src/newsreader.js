@@ -93,7 +93,7 @@ function toBlocks(html, base) {
   };
   const img = (i, caption) => {
     const src = absUrl(i.getAttribute('src') || i.getAttribute('data-src') || (i.getAttribute('srcset') || '').split(/\s+/)[0], base);
-    if (!src || seenImg.has(imgKey(src)) || /\.(svg|gif)(\?|$)/i.test(src) || /pixel|tracking|logo|avatar|icon/i.test(src)) return;
+    if (!src || seenImg.has(imgKey(src)) || /[?&](crop=1:1|w(idth)?=(\d{1,2}|[12]\d\d|3[0-2]\d)(&|$))/i.test(src) || /\b(headshot|author|byline|profile)\b/i.test(src + ' ' + (i.getAttribute('class') || '')) || /\.(svg|gif)(\?|$)/i.test(src) || /pixel|tracking|logo|avatar|icon/i.test(src)) return;
     seenImg.add(imgKey(src)); out.push({ t: 'img', src, alt: clean(i.getAttribute('alt')), caption: caption || '' });
   };
   walk(document.getElementById('r'));
@@ -123,8 +123,10 @@ async function extract(url) {
   const words = blocks.reduce((t, b) => t + (b.text ? b.text.split(/\s+/).length : b.items ? b.items.join(' ').split(/\s+/).length : 0), 0);
   // the lead (og:image) is shown as the hero, so drop any copy of it from the body
   if (info.image) { const hk = imgKey(info.image); for (let k = blocks.length - 1; k >= 0; k--) if (blocks[k].t === 'img' && imgKey(blocks[k].src) === hk) blocks.splice(k, 1); }
-  // and if the body starts with a picture while the page has no og:image, promote it to the hero
-  if (!info.image && blocks[0] && blocks[0].t === 'img') info.image = blocks.shift().src;
+  // A picture before the first paragraph is the article's own lead image. Publishers often give the social-card
+  // (og:image) and the in-article lead different file ids for the same photo, so show only one: the article's own.
+  const firstText = blocks.findIndex(b => b.t !== 'img');
+  if (blocks[0] && blocks[0].t === 'img' && (firstText === -1 || firstText > 0)) info.image = blocks.shift().src;
   return {
     ...info, title: (art && art.title) || info.title, author: clean((art && art.byline) || info.author), site: clean((art && art.siteName) || info.site),
     published: (art && art.publishedTime) || info.published, excerpt: clean((art && art.excerpt) || info.description),
@@ -143,7 +145,7 @@ export async function readArticle(ctx, link) {
   if (!link || !publicUrl(link)) throw Object.assign(new Error('Not a valid article link.'), { status: 400 });
   const item = await known(ctx, link);
   if (!item) throw Object.assign(new Error('Only headlines shown on this site can open in the reader.'), { status: 404 });
-  const r = await ctx.cache.resolve('reader3:' + link, TTL, async () => {
+  const r = await ctx.cache.resolve('reader4:' + link, TTL, async () => {
     const target = await resolveGoogle(link);
     if (!publicUrl(target)) throw new Error('The article address is not a public web page.');
     try { return await extract(target); }
